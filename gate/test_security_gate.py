@@ -67,7 +67,7 @@ def test_unverifiable_output_escalates_never_allows(write, doc):
 
 
 def test_output_labelled_as_another_reviewer_escalates(write):
-    doc = {"reviewer": "iac-reviewer", "findings": []}
+    doc = {"reviewer": "workflow-iac-reviewer", "findings": []}
     assert run({R: write(doc)})["decision"] == "escalate"
 
 
@@ -78,7 +78,7 @@ def test_prompt_injection_finding_escalates(write):
 
 def test_escalate_wins_over_block(write):
     blocking = write({"reviewer": R, "findings": [finding(severity="high")]}, "a.json")
-    r = gate.evaluate({R: blocking, "iac-reviewer": None}, [])
+    r = gate.evaluate({R: blocking, "workflow-iac-reviewer": None}, [])
     assert r["decision"] == "escalate" and r["block"]
 
 

@@ -6,7 +6,7 @@ escalates to a human, it is never allowed.
 
 Usage:
   security_gate.py --reviewer security-architect=out/architect.json \
-                   --reviewer injection-input-reviewer=out/injection.json \
+                   --reviewer security-tester=out/tester.json \
                    --sarif out/semgrep.sarif [--summary "$GITHUB_STEP_SUMMARY"]
 Exit code: 0 allow, 1 block, 2 escalate.
 """

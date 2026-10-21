@@ -37,7 +37,7 @@ All external input is validated on the server against an allow list: type, lengt
 Queries, OS commands, object-storage keys and file paths are never built by concatenating untrusted data; parameterised or typed APIs are used.
 - Applies when: `INPUT`
 - ASVS: 1.2.4, 1.2.5
-- Evidence: Semgrep CE clean on injection rules; injection-input reviewer has no open findings
+- Evidence: Semgrep CE clean on injection rules; security-tester (injection-input checks) has no open findings
 
 ### SR-003 Context-correct output encoding
 Untrusted data is encoded for the output context. The web frontend renders untrusted data only through text APIs (`textContent`, attribute setters), never `innerHTML` or equivalent.
@@ -119,7 +119,7 @@ Functions that write data or are specific to a user require authentication throu
 Function-level and object-level authorisation are enforced on the server on every request, denying by default. Ownership is checked on every object access.
 - Applies when: `AUTHZ`, `WRITE`
 - ASVS: 8.2.1, 8.2.2, 8.3.1
-- Evidence: authorisation matrix in the spec; tests per role including cross-user access (`test_*_other_user_forbidden`); authn-authz reviewer clean
+- Evidence: authorisation matrix in the spec; tests per role including cross-user access (`test_*_other_user_forbidden`); security-tester (authn-authz checks) clean
 
 ### SR-016 No default accounts, MFA for administration
 There are no default or shared accounts, and administrative access requires MFA.
@@ -139,7 +139,7 @@ Authentication results, authorisation failures and rejected input are logged wit
 Logs, URLs, query strings and error messages contain no secrets, tokens or personal data.
 - Applies when: `LOG`, `DATA`, `SECRET`
 - ASVS: 16.2.5, 14.2.1
-- Evidence: secrets-pii-logging reviewer clean; gitleaks clean
+- Evidence: security-tester (secrets-pii-logging checks) clean; gitleaks clean
 
 ### SR-019 Data minimisation and inventory
 Personal data is collected only when needed and is recorded in the spec with purpose and retention. Image metadata that can identify people or locations (for example EXIF GPS) is removed before storage.
@@ -153,7 +153,7 @@ Personal data is collected only when needed and is recorded in the spec with pur
 Nothing secret is committed or stored in CI secrets. Runtime and CI access uses short-lived federated credentials with least privilege.
 - Applies when: `SECRET`, `CI`, `IAC`
 - ASVS: 13.3.1, 13.3.2
-- Evidence: gitleaks clean; workflows use OIDC only; secrets-pii-logging reviewer clean
+- Evidence: gitleaks clean; workflows use OIDC only; security-tester (secrets-pii-logging checks) clean
 
 ### SR-021 Trusted, current dependencies
 Dependencies, base images and CI tools come from trusted sources, are pinned (version or digest), and have no known exploitable vulnerabilities at merge time.
@@ -167,13 +167,13 @@ Dependencies, base images and CI tools come from trusted sources, are pinned (ve
 IAM policies name exact resources and actions. Every role carries the lab permissions boundary. Wildcard resources are allowed only for documented unscopable actions.
 - Applies when: `IAC`
 - ASVS: — (cloud IAM is out of ASVS scope; lab-admin `docs/BASELINE.md` BL-11, BL-12, BL-17)
-- Evidence: Checkov or Trivy clean on IAM checks; iac reviewer clean
+- Evidence: Checkov or Trivy clean on IAM checks; workflow-iac-reviewer clean
 
 ### SR-023 Private, encrypted storage
 Storage is private by default: public access blocked, encrypted at rest (SSE-S3), TLS-only access. Objects reach users only through short-lived signed URLs or an authenticated path.
 - Applies when: `IAC`, `FILE`
 - ASVS: 12.2.1 (TLS); lab BASELINE BL-19
-- Evidence: Checkov or Trivy clean on S3 checks; iac reviewer clean
+- Evidence: Checkov or Trivy clean on S3 checks; workflow-iac-reviewer clean
 
 ## CI/CD and AI
 
