@@ -1,0 +1,12 @@
+{
+  "name": "appsec-baseline",
+  "description": "AppSec-owned security reviewers for the AI-native S-SDLC lab",
+  "owner": { "name": "ai-sdlc-lab" },
+  "plugins": [
+    {
+      "name": "appsec-review",
+      "source": "./",
+      "description": "Security requirements auditor, security architect and four narrow read-only code reviewers"
+    }
+  ]
+}
