@@ -143,58 +143,76 @@ jobs:
           name: ${{ inputs.zap_artifact }}
           path: .zap
 
-      - name: Build Claude arguments
-        id: args
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.scope.outputs.files != '0'
+        with:
+          node-version: "24"
+
+      # Claude Code CLI pinned by lockfile (npm ci verifies every package hash). Install
+      # scripts are off; only the CLI's own, hash-verified linker script is run.
+      - name: Install Claude Code (pinned)
         if: steps.scope.outputs.files != '0'
         run: |
           set -euo pipefail
-          # The Claude CLI's validator does not load the 2020-12 meta-schema: give it a flat copy
-          # (definitions inlined, no $schema/$id/descriptions). The gate still validates the full schema.
-          schema=$(jq -c '.properties.findings.items = .["$defs"].finding | del(.["$defs"], .["$schema"], .["$id"]) | del(.. | .description?)' \
-            .appsec-baseline/schemas/findings.schema.json)
-          delim="EOF_$(openssl rand -hex 16)"
-          {
-            echo "claude_args<<$delim"
-            echo "--plugin-dir .appsec-baseline --agent appsec-review:$REVIEWER --model $MODEL --max-turns 40"
-            echo "--disallowedTools \"Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent,mcp__*\""
-            echo "--json-schema '$schema'"
-            echo "$delim"
-          } >> "$GITHUB_OUTPUT"
+          npm ci --ignore-scripts --no-audit --no-fund --prefix .appsec-baseline/tools/claude
+          node .appsec-baseline/tools/claude/node_modules/@anthropic-ai/claude-code/install.cjs
+          .appsec-baseline/tools/claude/node_modules/.bin/claude --version
 
       - name: Run reviewer
-        id: claude
         if: steps.scope.outputs.files != '0'
-        continue-on-error: true # the gate escalates missing output
-        uses: anthropics/claude-code-action@6b6870e649b5ff408753befeaee5fc7989d4e6a9 # v1
-        with:
-          prompt: ${{ steps.scope.outputs.prompt }}
-          claude_args: ${{ steps.args.outputs.claude_args }}
-          github_token: ${{ github.token }} # job token: keeps the Claude GitHub App out of reviewer jobs
-          anthropic_organization_id: ${{ inputs.anthropic_organization_id }}
-          anthropic_federation_rule_id: ${{ inputs.anthropic_federation_rule_id }}
-          anthropic_service_account_id: ${{ inputs.anthropic_service_account_id }}
-          anthropic_workspace_id: ${{ inputs.anthropic_workspace_id }}
+        env:
+          PROMPT: ${{ steps.scope.outputs.prompt }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic_organization_id }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic_federation_rule_id }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ inputs.anthropic_service_account_id }}
+          ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic_workspace_id }}
+        run: |
+          set +e -uo pipefail
+          mkdir -p out
+          umask 077
+          export ANTHROPIC_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc/token"
+          mkdir -p "$(dirname "$ANTHROPIC_IDENTITY_TOKEN_FILE")"
+          # GitHub OIDC tokens last ~5 minutes and are single-use at Anthropic: keep the file fresh.
+          fetch() {
+            curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | jq -r .value > "$ANTHROPIC_IDENTITY_TOKEN_FILE.tmp" \
+              && mv "$ANTHROPIC_IDENTITY_TOKEN_FILE.tmp" "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          }
+          fetch
+          ( while sleep 120; do fetch; done ) & refresher=$!
+          # The CLI's validator does not load the 2020-12 meta-schema: pass a flat copy
+          # (definitions inlined). The gate still validates against the full schema.
+          schema=$(jq -c '.properties.findings.items = .["$defs"].finding | del(.["$defs"], .["$schema"], .["$id"]) | del(.. | .description?)' \
+            .appsec-baseline/schemas/findings.schema.json)
+          # The PR's own Claude settings, hooks and MCP servers are untrusted: load none of them.
+          .appsec-baseline/tools/claude/node_modules/.bin/claude -p "$PROMPT" \
+            --setting-sources user --strict-mcp-config \
+            --plugin-dir .appsec-baseline --agent "appsec-review:$REVIEWER" \
+            --model "$MODEL" --max-turns 40 \
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent,mcp__*" \
+            --json-schema "$schema" --output-format json > out/claude.json 2> out/claude.err
+          rc=$?
+          kill "$refresher" 2>/dev/null; rm -f "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          echo "claude exit code: $rc"
+          exit 0 # the gate decides; missing output escalates
 
       - name: Collect output and metrics
         env:
           FILES: ${{ steps.scope.outputs.files }}
-          STRUCTURED: ${{ steps.claude.outputs.structured_output }}
-          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          APPSEC_SHA: ${{ steps.self.outputs.sha }}
         run: |
           set -euo pipefail
-          mkdir -p out
+          mkdir -p out && touch out/claude.err
           if [[ "$FILES" == 0 ]]; then
             jq -n --arg r "$REVIEWER" '{reviewer: $r, findings: []}' > out/review.json
             echo '{"skipped": "no files in scope"}' > out/metrics.json
             exit 0
           fi
-          printf '%s' "$STRUCTURED" > out/review.json
-          # Usage for Stage 2 measurements; field names checked on the first run.
-          if [[ -f "$EXECUTION_FILE" ]]; then
-            jq --arg m "$MODEL" --arg r "$REVIEWER" \
-              '{reviewer: $r, model: $m} + ([.[] | select(.type? == "result")] | last
-               | {total_cost_usd, duration_ms, num_turns, usage})' "$EXECUTION_FILE" > out/metrics.json || true
-          fi
+          jq '.structured_output // empty' out/claude.json > out/review.json 2>/dev/null || : > out/review.json
+          jq --arg m "$MODEL" --arg r "$REVIEWER" --arg s "$APPSEC_SHA" \
+            '{reviewer: $r, model: $m, appsec_sha: $s, is_error, terminal_reason, total_cost_usd, duration_ms, num_turns, usage, modelUsage}' \
+            out/claude.json > out/metrics.json 2>/dev/null || echo '{"error": "no CLI result"}' > out/metrics.json
+          rm -f out/claude.json # the full transcript is not published; only validated output and metrics
 
       # Public repo: output becomes a PR comment and artifact. Redact credentials first;
       # a credential in agent output is itself suspicious, so any redaction escalates.
@@ -202,7 +220,7 @@ jobs:
         id: redact
         run: |
           set -euo pipefail
-          n=$(python3 .appsec-baseline/gate/redact.py out/*.json)
+          n=$(python3 .appsec-baseline/gate/redact.py out/*.json out/claude.err)
           echo "count=$n" >> "$GITHUB_OUTPUT"
           [[ "$n" == 0 ]] || echo "::warning::redacted $n credential-like string(s) from reviewer output"
 

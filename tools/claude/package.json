@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "Pinned Claude Code CLI for the AppSec reviewers (npm ci verifies every package hash)",
+  "dependencies": { "@anthropic-ai/claude-code": "2.1.308" }
+}
