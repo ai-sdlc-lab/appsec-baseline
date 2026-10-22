@@ -1,0 +1,8 @@
+{
+  "name": "appsec-review",
+  "description": "Security requirements auditor, security architect and four narrow read-only code reviewers",
+  "author": {
+    "name": "ai-sdlc-lab"
+  },
+  "version": "0.1.0"
+}
