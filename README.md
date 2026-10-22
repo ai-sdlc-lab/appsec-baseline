@@ -10,6 +10,7 @@ AppSec-owned security baseline for the AI-native S-SDLC lab (`ai-sdlc-lab`). App
 | `skills/` | Checklists preloaded into `security-tester`: `injection-input`, `authn-authz`, `secrets-pii-logging` |
 | `schemas/findings.schema.json` | Reviewer output: findings with mandatory evidence; passed to agents as `--json-schema` |
 | *When they run* | Every PR: scanners + gate. Spec PRs: auditor + architect. `.github/`/`infra/` PRs: workflow-iac-reviewer. `main` before release: security-tester (deploy waits for its gate). |
+| `exceptions/` | Scanner exceptions (lab exceptions only), read by app pipelines at the pinned commit so a PR cannot add its own suppressions |
 | `gate/security_gate.py` | Deterministic allow / block / escalate over reviewer outputs and SARIF. Unverifiable output escalates, never allows |
 
 ## Use locally
