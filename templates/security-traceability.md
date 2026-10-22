@@ -10,8 +10,8 @@ Artifacts reviewed: <intent.md | spec.md | plan.md> @ `<sha>`
 |---|---|---|
 
 ## Requirements
-| SR | Status (covered / missing / N/A) | Where (artifact § or test) | Justification |
-|---|---|---|---|
+| SR | Level (MUST/SHOULD) | Status (covered / missing / N/A) | Where (artifact § or test) | Justification |
+|---|---|---|---|---|
 
 ## Summary
 Covered: n · Missing: n · N/A: n

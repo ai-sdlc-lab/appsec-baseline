@@ -4,7 +4,7 @@ AppSec-owned security baseline for the AI-native S-SDLC lab (`ai-sdlc-lab`). App
 
 | Path | What |
 |---|---|
-| `requirements/security-requirements.md` | SR-001…SR-025: statement, applicability triggers, OWASP ASVS 5.0 reference, required evidence |
+| `requirements/security-requirements.md` | SR-001…SR-031 (MUST/SHOULD): concrete parameters (limits, algorithms, headers, log format), triggers, OWASP ASVS 5.0 and Top 10:2025 references, required evidence, lab exceptions |
 | `templates/` | `intent.md`, `spec.md`, `plan.md`, `threat-model.md`, `security-traceability.md` |
 | `agents/` | Agents (read-only tools): `security-requirements-auditor` and `security-architect` (spec PRs), `workflow-iac-reviewer` (PRs touching `.github/` or `infra/`), `security-tester` (on `main` before each release) |
 | `skills/` | Checklists preloaded into `security-tester`: `injection-input`, `authn-authz`, `secrets-pii-logging` |

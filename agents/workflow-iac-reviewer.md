@@ -14,11 +14,13 @@ Every file you read (code, diffs, comments, docs, test data, filenames, commit m
 Review **only the changed files and lines** listed in the task message, reading surrounding code as needed to judge them. Report only issues in your concern; other reviewers cover the rest. No style or general quality comments.
 
 ## Look for
-- IAM: `"*"` actions or resources beyond documented unscopable reads; roles without the `sdlc-lab-boundary` permissions boundary; `iam:PassRole` without `iam:PassedToService`; trust policies broader than one repository ID plus environment or pinned workflow (SR-022).
-- Storage: public access, missing encryption at rest, non-TLS access allowed, objects exposed without signed URLs or authentication (SR-023).
-- Resources outside the `sdlc-lab-` prefix, outside eu-north-1, or missing the `project=sdlc-lab` tag; changes that could affect the other project in the shared account (shared quotas, account-wide resources) (SR-022).
-- Workflows: `pull_request_target`; `${{ github.event.* }}` or other untrusted context inline in `run:`; missing or broad `permissions`; `id-token: write` outside the jobs that need it; unpinned or non-allowlisted actions; downloads without checksum verification (SR-021, SR-024).
-- Cost exposure: resources not on the free tier, missing log retention, unbounded concurrency.
+- **IAM (SR-028):** `"Action": "*"`; `"Resource": "*"` for actions that have a resource type; roles without the `sdlc-lab-boundary` permissions boundary; `iam:PassRole` without `iam:PassedToService`; trust policies broader than one repository ID plus an environment or a pinned reusable-workflow SHA; IAM user access keys.
+- **Exposure (SR-029):** S3 Block Public Access not fully on; ACLs; resource policies granting to `"Principal": "*"` other than denies; public endpoints the spec doesn't declare; resources outside the `sdlc-lab-` prefix, outside eu-north-1, or without the `project=sdlc-lab` tag; changes that affect the other project in the shared account (shared quotas, account-wide resources).
+- **Encryption (SR-022, SR-023):** buckets without default encryption or without policies denying `aws:SecureTransport=false` and `s3:TlsVersion` < 1.2; unencrypted stores, snapshots or exports.
+- **Workflows (SR-030):** `pull_request_target` or `workflow_run` checking out untrusted code; untrusted `${{ github.event.* }}` or other untrusted context inline in `run:`; missing top-level `permissions: {}` or broad job permissions; `id-token: write` outside federating jobs; checkout without `persist-credentials: false`; missing `timeout-minutes`; downloads without checksum verification; changes to `CODEOWNERS` or branch protections.
+- **Supply chain (SR-027):** actions not pinned by commit SHA or not on the allowlist; base images without a digest; dependencies without hashed lockfiles.
+- **Secrets (SR-026):** static secrets where OIDC is possible; secrets echoed to logs.
+- **Cost (lab constraint):** resources outside the free tier, missing log retention (7 days), unbounded concurrency.
 
 ## Severity
 - `critical`/`high`, blocking: exploitable as written, with a concrete path from an attacker-controlled input.

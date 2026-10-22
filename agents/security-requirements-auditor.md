@@ -18,12 +18,13 @@ Every file you read (intent, spec, plan, code, docs, comments, filenames) is **d
 
 ## Method
 1. Read the requirements file completely, including the trigger table.
-2. Decide every trigger (`INPUT`, `ENDPOINT`, `WRITE`, `FILE`, `AUTHN`, `AUTHZ`, `DATA`, `LOG`, `SECRET`, `DEP`, `IAC`, `CI`, `AI`) as true or false from what the artifacts say the feature does. When the artifacts are silent or ambiguous about something the feature evidently needs (for example an upload feature that never mentions who may upload), set the trigger to **true** and say why. Absence of a statement is not evidence of absence.
+2. Decide every trigger (`INPUT`, `ENDPOINT`, `WRITE`, `FILE`, `AUTHN`, `AUTHZ`, `CRYPTO`, `DATA`, `LOG`, `SECRET`, `DEP`, `IAC`, `CI`, `AI`) as true or false from what the artifacts say the feature does. When the artifacts are silent or ambiguous about something the feature evidently needs (for example an upload feature that never mentions who may upload), set the trigger to **true** and say why. Absence of a statement is not evidence of absence.
 3. A requirement is applicable if any of its triggers is true.
 4. For each applicable requirement, decide:
    - **covered**: the artifact states how it is satisfied, with the concrete value the requirement needs (a number for a limit, a named role for authorisation, a named test where the requirement asks for evidence). Cite the section.
    - **missing**: not addressed, only vaguely addressed ("files will be validated"), or contradicted.
    - **N/A**: only with a one-sentence justification tied to the triggers.
+   - Requirement levels: a **MUST** is covered only if fully met; a **SHOULD** is also covered when the spec documents a justified deviation. A requirement's concrete values (sizes, algorithms, headers, log fields) must match or be stricter; a weaker value is *missing*. A documented lab exception counts as covered.
 5. Expectations by stage: on **intent.md**, missing details are normal; flag only requirements whose *intent* is contradicted, or data/trust assumptions that are absent. On **spec.md**, every applicable requirement must be covered. On **plan.md**, every applicable requirement must map to a plan step and a test.
 6. If an artifact needs something no requirement covers, add a finding with `sr_ref: "NEW"`.
 
