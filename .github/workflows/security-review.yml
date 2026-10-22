@@ -193,14 +193,32 @@ jobs:
                | {total_cost_usd, duration_ms, num_turns, usage})' "$EXECUTION_FILE" > out/metrics.json || true
           fi
 
+      # Public repo: output becomes a PR comment and artifact. Redact credentials first;
+      # a credential in agent output is itself suspicious, so any redaction escalates.
+      - name: Redact credentials
+        id: redact
+        run: |
+          set -euo pipefail
+          n=$(python3 .appsec-baseline/gate/redact.py out/*.json)
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          [[ "$n" == 0 ]] || echo "::warning::redacted $n credential-like string(s) from reviewer output"
+
       - name: Gate
         id: gate
+        env:
+          REDACTED: ${{ steps.redact.outputs.count }}
         run: |
           set -uo pipefail
           python3 -m pip install -q -r .appsec-baseline/gate/requirements.txt
           python3 .appsec-baseline/gate/security_gate.py --reviewer "$REVIEWER=out/review.json" \
             --summary "$GITHUB_STEP_SUMMARY" > out/decision.json
           rc=$?
+          if [[ "$REDACTED" != 0 ]]; then
+            echo "::error::credential-like strings in reviewer output: escalating to a human"
+            jq '.decision = "escalate" | .escalate += ["credential-like strings redacted from reviewer output"]' \
+              out/decision.json > out/d.json && mv out/d.json out/decision.json
+            rc=2
+          fi
           echo "decision=$(jq -r .decision out/decision.json)" >> "$GITHUB_OUTPUT"
           exit $rc
 
