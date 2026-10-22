@@ -1,0 +1,2 @@
+# AppSec owns everything here; app agents never write to it (playbook ATK-08).
+*  @nkalexiou
