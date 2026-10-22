@@ -1,0 +1,8 @@
+# Scanner exceptions, owned by AppSec. App repositories cannot add their own:
+# the scanners job reads this file from appsec-baseline at the pinned commit.
+# Each entry names the requirement and the lab exception it implements.
+
+# SR-023 lab exception: AWS-managed keys (SSE-S3 / service default) instead of
+# customer-managed KMS keys, cost constraint (lab-admin BASELINE).
+AWS-0132
+AWS-0017
