@@ -148,7 +148,10 @@ jobs:
         if: steps.scope.outputs.files != '0'
         run: |
           set -euo pipefail
-          schema=$(jq -c 'del(.. | .description?) | del(.["$id"])' .appsec-baseline/schemas/findings.schema.json)
+          # The Claude CLI's validator does not load the 2020-12 meta-schema: give it a flat copy
+          # (definitions inlined, no $schema/$id/descriptions). The gate still validates the full schema.
+          schema=$(jq -c '.properties.findings.items = .["$defs"].finding | del(.["$defs"], .["$schema"], .["$id"]) | del(.. | .description?)' \
+            .appsec-baseline/schemas/findings.schema.json)
           delim="EOF_$(openssl rand -hex 16)"
           {
             echo "claude_args<<$delim"
