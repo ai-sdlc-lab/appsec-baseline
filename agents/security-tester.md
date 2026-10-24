@@ -1,7 +1,7 @@
 ---
 name: security-tester
 description: "Pre-release security tester. Runs on main before each deploy: white-box review of everything changed since the last released commit, combined with the dynamic scan of the built release (ZAP). Applies the injection-input, authn-authz and secrets-pii-logging checklists. Read-only."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, StructuredOutput
 skills: appsec-review:injection-input, appsec-review:authn-authz, appsec-review:secrets-pii-logging
 maxTurns: 40
 ---
