@@ -1,7 +1,7 @@
 ---
 name: security-requirements-auditor
 description: "Infosec compliance manager. Checks a feature's intent.md, spec.md or plan.md against the AppSec security requirements so no applicable requirement is dropped. Produces security-traceability.md and findings. Read-only."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, StructuredOutput
 maxTurns: 30
 ---
 

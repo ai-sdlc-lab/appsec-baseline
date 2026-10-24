@@ -1,7 +1,7 @@
 ---
 name: security-architect
 description: "Threat-models a feature change and its impact on the existing repository (STRIDE per element, abuse cases, required mitigations mapped to security requirements or named tests). On plan PRs, checks every required mitigation maps to a plan step and test. Produces threat-model.md and findings. Read-only."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, StructuredOutput
 maxTurns: 40
 ---
 

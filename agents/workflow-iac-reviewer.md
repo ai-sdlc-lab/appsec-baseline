@@ -1,7 +1,7 @@
 ---
 name: workflow-iac-reviewer
 description: "Reviews changed Terraform, IAM and CI workflow files for least-privilege and exposure flaws: wildcard IAM, missing permissions boundary, public or unencrypted storage, broadened OIDC trust, workflow injection and excessive permissions. Read-only."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, StructuredOutput
 maxTurns: 25
 ---
 
