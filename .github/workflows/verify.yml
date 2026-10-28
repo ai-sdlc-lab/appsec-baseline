@@ -1,0 +1,124 @@
+name: verify
+
+# AppSec-owned CI verifier for the local stage loop (SPEC-0001 §2.5). No AI.
+# Product repos call it at the lock SHA:
+#   uses: ai-sdlc-lab/appsec-baseline/.github/workflows/verify.yml@<appsec-baseline.lock>
+# It runs no PR code: it reads the PR head and base as data, runs this repo's scripts at the
+# lock SHA, and needs a JUnit artifact named "junit" from the caller's read-only tests job.
+
+on:
+  workflow_call: {}
+
+permissions: {}
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write # only the failure comment (no finding, no comment)
+    steps:
+      - name: Only pull requests
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          [[ "$EVENT" == pull_request ]] || { echo "::error::verify runs on pull_request only"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Lock (base branch; head only while the base has none, M-18)
+        id: lock
+        run: |
+          set -euo pipefail
+          if [[ -f base/stages.yml && -f base/appsec-baseline.lock ]]; then src="base"; else src="head"; echo "BOOTSTRAP: lock read from the PR head"; fi
+          lock=$(tr -d '[:space:]' < "$src/appsec-baseline.lock")
+          [[ "$lock" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::appsec-baseline.lock is not a commit SHA"; exit 1; }
+          echo "sha=$lock" >> "$GITHUB_OUTPUT"
+
+      - name: Lock is on appsec-baseline main
+        id: onmain
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOCK: ${{ steps.lock.outputs.sha }}
+        run: |
+          set -euo pipefail
+          status=$(gh api "repos/ai-sdlc-lab/appsec-baseline/compare/main...$LOCK" --jq .status || echo error)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          # fail before anything runs from that commit (a fork-network or unmerged commit is refused)
+          [[ "$status" == identical || "$status" == behind ]] || { echo "::error::lock is not on appsec-baseline main ($status)"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ai-sdlc-lab/appsec-baseline
+          ref: ${{ steps.lock.outputs.sha }}
+          path: .appsec
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - run: python -I -m pip install --quiet --require-hashes -r .appsec/gate/requirements.txt
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # missing JUnit fails inside verify.py (named tests), not here
+        with:
+          name: junit
+          path: junit
+
+      - name: Verify
+        id: verify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.event.repository.name }}
+          ONMAIN: ${{ steps.onmain.outputs.status }}
+        run: |
+          set +e -uo pipefail
+          python -I -B .appsec/stage/verify.py --head head --base base --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" \
+            --repo "$REPO" --head-ref "$HEAD_REF" --junit junit/junit.xml --lock-on-main "$ONMAIN" \
+            --summary "$GITHUB_STEP_SUMMARY" --comment "$RUNNER_TEMP/comment.md"
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Failure comment only (deleted when clean)
+        if: always() && steps.verify.outcome == 'success'
+        continue-on-error: true # fork PRs get a read-only token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          marker="<!-- appsec-verify -->"
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=$(printf '%s\n' "$ids" | sed -n 1p)
+          if [[ -f "$RUNNER_TEMP/comment.md" ]]; then
+            if [[ -n "$id" ]]; then
+              gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
+            else
+              gh pr comment "$PR" -R "$REPO" --body-file "$RUNNER_TEMP/comment.md"
+            fi
+          elif [[ -n "$id" ]]; then
+            gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null
+          fi
+
+      - name: Result
+        env:
+          RC: ${{ steps.verify.outputs.rc }}
+        run: |
+          [[ "$RC" == 0 ]]

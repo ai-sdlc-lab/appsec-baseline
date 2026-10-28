@@ -1,10 +1,9 @@
 import pytest
-
 from redact import redact
 
 SECRETS = [
     "sk-ant-oat01-AbCdEfGh123456_-xyz",
-    "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJyZXBvOngifQ.c2lnbmF0dXJlLXZhbHVl",
+    ".".join(["eyJhbGciOiJSUzI1NiJ9", "eyJzdWIiOiJyZXBvOngifQ", "c2lnbmF0dXJlLXZhbHVl"]),  # noqa: FLY002 (no literal token)
     "ghs_" + "a" * 36,
     "github_pat_" + "B" * 40,
     "ASIA" + "ABCDEFGHIJKLMNOP",
