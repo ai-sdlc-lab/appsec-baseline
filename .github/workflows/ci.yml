@@ -72,7 +72,7 @@ jobs:
           echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
           tar -xzf gitleaks.tgz gitleaks && tar -xzf actionlint.tgz actionlint
           sudo install osv-scanner gitleaks actionlint /usr/local/bin/
-          pip install --quiet --require-hashes -r tools/scanners/requirements.txt
+          pip install --quiet --require-hashes -r "$GITHUB_WORKSPACE/tools/scanners/requirements.txt"
       - name: Run scanners
         run: |
           set +e -uo pipefail
