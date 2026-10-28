@@ -475,3 +475,10 @@ def test_workflow_python_runs_isolated():
             m = re.search(r"\bpython3?\s+(\S+)", line)
             if m and not line.strip().startswith("#") and "setup-python" not in line:
                 assert m.group(1) == "-I", f"{name}: {line.strip()}"
+
+
+def test_plan_files_include_root_files_without_extension():
+    from plan import steps
+
+    text = "## Repo: dogs-app\n| # | Files | Implements | Tests |\n|---|---|---|---|\n| D-01 | `Makefile`, `Dockerfile`, `uses: x@y`, `api/*.py` | SR-001 | `test_a` |\n"
+    assert steps(text, "dogs-app")[0]["files"] == ["Makefile", "Dockerfile", "api/*.py"]

@@ -6,6 +6,7 @@ import re
 ROW = re.compile(r"^\|\s*([A-Z]-[0-9]{2})\s*\|(.*)$")
 TEST = re.compile(r"\btest_[A-Za-z0-9_]+")
 CODE = re.compile(r"`([^`]+)`")
+FILE = re.compile(r"[A-Za-z0-9._/*-]+")  # a path or glob; prose in backticks (spaces, colons) is not a file
 
 
 def _cells(rest: str) -> list[str]:
@@ -31,7 +32,7 @@ def steps(text: str, repo: str | None = None) -> list[dict]:
             {
                 "id": m.group(1),
                 "repo": current,
-                "files": [f for f in CODE.findall(files) if "/" in f or "." in f],
+                "files": [f for f in CODE.findall(files) if FILE.fullmatch(f)],
                 "implements": set(re.findall(r"SR-[0-9]{3}|M-[0-9]{2}", implements)),
                 "tests": set(TEST.findall(tests)),
             }
