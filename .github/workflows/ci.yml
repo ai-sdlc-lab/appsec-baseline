@@ -13,6 +13,7 @@ jobs:
   gate:
     name: gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -22,8 +23,65 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
-      - run: pip install -r gate/requirements.txt -r gate/requirements-dev.txt
-      - working-directory: gate
-        run: ruff check --line-length 120 . && ruff format --line-length 120 --check . && python -m pytest -q
-      - name: Schema is valid JSON Schema 2020-12
-        run: python -c "import json,jsonschema; jsonschema.Draft202012Validator.check_schema(json.load(open('schemas/findings.schema.json')))"
+      - run: |
+          pip install --quiet --require-hashes -r gate/requirements.txt -r gate/requirements-dev.txt
+      - name: Lint and test gate and stage scripts
+        run: |
+          ruff check --line-length 120 gate stage && ruff format --line-length 120 --check gate stage
+          python -m pytest -q gate stage/tests
+      - name: Schemas are valid JSON Schema 2020-12
+        run: |
+          for s in schemas/*.schema.json; do
+            python -c "import json,sys,jsonschema; jsonschema.Draft202012Validator.check_schema(json.load(open(sys.argv[1])))" "$s"
+          done
+      - name: SR exceptions file is valid (M-12)
+        run: python -I -B stage/exceptions.py exceptions/sr-exceptions.yml
+
+  scanners:
+    name: scanners
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      OSV_VERSION: v2.7.0
+      OSV_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      SEMGREP_IMAGE: semgrep/semgrep@sha256:3db5c7af55eb1f512eac0abf0ab69a97b52c74b5e9a27314c221aee1a78d7ab2
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install scanners (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSLo osv-scanner "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SHA256}  osv-scanner" | sha256sum -c -
+          curl -fsSLo gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          curl -fsSLo actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks && tar -xzf actionlint.tgz actionlint
+          sudo install osv-scanner gitleaks actionlint /usr/local/bin/
+          pip install --quiet --require-hashes -r "$GITHUB_WORKSPACE/tools/scanners/requirements.txt"
+      - name: Run scanners
+        run: |
+          set +e -uo pipefail
+          fail=0
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" semgrep --test semgrep/ || { echo "::error::semgrep rule tests failed"; fail=1; }
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" semgrep scan --config p/default --config semgrep/tls.yml \
+            --metrics=off --exclude semgrep --error || { echo "::error::Semgrep findings (SR-002, SR-022)"; fail=1; }
+          osv-scanner scan source --lockfile requirements.txt:gate/requirements.txt || { echo "::error::OSV findings (SR-027)"; fail=1; }
+          gitleaks git --log-opts="$BASE_SHA..HEAD" --redact || { echo "::error::gitleaks found secrets (SR-026)"; fail=1; }
+          zizmor --offline .github/workflows/ || { echo "::error::zizmor findings (SR-030)"; fail=1; }
+          actionlint || { echo "::error::actionlint failed (SR-030)"; fail=1; }
+          exit $fail

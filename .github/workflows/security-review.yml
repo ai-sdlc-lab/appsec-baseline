@@ -70,7 +70,7 @@ jobs:
           token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=appsec-baseline-self" | jq -r .value)
           echo "::add-mask::$token"
-          claims=$(printf '%s' "$token" | python3 -c 'import base64,json,sys; p=sys.stdin.read().split(".")[1]; print(json.dumps(json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4)))))')
+          claims=$(printf '%s' "$token" | python3 -I -c 'import base64,json,sys; p=sys.stdin.read().split(".")[1]; print(json.dumps(json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4)))))')
           ref=$(jq -r .job_workflow_ref <<<"$claims"); sha=$(jq -r .job_workflow_sha <<<"$claims")
           [[ "$ref" == ai-sdlc-lab/appsec-baseline/.github/workflows/security-review.yml@* && "$sha" =~ ^[0-9a-f]{40}$ ]] \
             || { echo "::error::unexpected workflow identity"; exit 1; }
@@ -220,7 +220,7 @@ jobs:
         id: redact
         run: |
           set -euo pipefail
-          n=$(python3 .appsec-baseline/gate/redact.py out/*.json out/claude.err)
+          n=$(python3 -I .appsec-baseline/gate/redact.py out/*.json out/claude.err)
           echo "count=$n" >> "$GITHUB_OUTPUT"
           [[ "$n" == 0 ]] || echo "::warning::redacted $n credential-like string(s) from reviewer output"
 
@@ -230,8 +230,8 @@ jobs:
           REDACTED: ${{ steps.redact.outputs.count }}
         run: |
           set -uo pipefail
-          python3 -m pip install -q -r .appsec-baseline/gate/requirements.txt
-          python3 .appsec-baseline/gate/security_gate.py --reviewer "$REVIEWER=out/review.json" \
+          python3 -I -m pip install -q --require-hashes -r .appsec-baseline/gate/requirements.txt
+          python3 -I .appsec-baseline/gate/security_gate.py --reviewer "$REVIEWER=out/review.json" \
             --summary "$GITHUB_STEP_SUMMARY" > out/decision.json
           rc=$?
           if [[ "$REDACTED" != 0 ]]; then
@@ -243,7 +243,8 @@ jobs:
           echo "decision=$(jq -r .decision out/decision.json)" >> "$GITHUB_OUTPUT"
           exit $rc
 
-      - name: Post report to the PR
+      # Issue #9 / SPEC-0001 §1.7: no finding, no comment. Errors show in the check status and log only.
+      - name: Post findings to the PR (only if there are findings)
         if: always() && github.event_name == 'pull_request' && steps.scope.outputs.files != '0'
         continue-on-error: true # fork PRs get a read-only token
         env:
@@ -253,17 +254,21 @@ jobs:
         run: |
           set -euo pipefail
           marker="<!-- appsec-review:$REVIEWER -->"
-          {
-            echo "$marker"
-            echo "### $REVIEWER: $(jq -r .decision out/decision.json 2>/dev/null || echo error)"
-            echo
-            jq -r '.artifact // empty' out/review.json 2>/dev/null || true
-            echo
-            echo "| ID | Severity | SR | Location | Evidence |"
-            echo "|---|---|---|---|---|"
-            jq -r '.findings[]? | "| \(.id) | \(.severity) | \(.sr_ref) | `\(.file):\(.line // "-")` | \(.evidence | gsub("\\|"; "/") | gsub("\n"; " ") | .[0:300]) |"' out/review.json 2>/dev/null || true
-          } > "$RUNNER_TEMP/comment.md"
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          n=$(jq '.findings | length' out/review.json 2>/dev/null || echo 0)
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=$(printf '%s\n' "$ids" | sed -n 1p)
+          if [[ "$n" == 0 ]]; then
+            [[ -z "$id" ]] || gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null
+            exit 0
+          fi
+          jq -r '.findings[] | "\(.id) [\(.severity)] \(.sr_ref) \(.file):\(.line // "-") \(.evidence)"' out/review.json > "$RUNNER_TEMP/items.txt"
+          python3 -I - "$marker" "$REVIEWER: $(jq -r .decision out/decision.json)" "$RUNNER_TEMP/items.txt" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import sys
+          sys.path.insert(0, ".appsec-baseline/stage")
+          from render import comment
+          print(comment(sys.argv[1], sys.argv[2], open(sys.argv[3]).read().splitlines()))
+          PY
           if [[ -n "$id" ]]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
           else

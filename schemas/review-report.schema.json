@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ai-sdlc-lab/appsec-baseline/schemas/review-report.schema.json",
+  "title": "Committed review report",
+  "description": "One per reviewer and stage, committed as docs/specs/<NNNN>-<slug>/reviews/<STAGE>-<NNNN>.<reviewer>.json (SPEC-0001 \u00a72.2). Untrusted input to the CI verifier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reviewer",
+    "stage",
+    "change",
+    "model",
+    "round",
+    "appsec_sha",
+    "files",
+    "produced",
+    "verdict",
+    "findings"
+  ],
+  "properties": {
+    "reviewer": {
+      "type": "string",
+      "enum": [
+        "intent-completeness",
+        "spec-completeness",
+        "architecture-conformance",
+        "security-requirements-auditor",
+        "security-architect",
+        "security-code-reviewer",
+        "workflow-iac-reviewer"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "intent",
+        "spec",
+        "plan",
+        "code"
+      ]
+    },
+    "change": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$"
+    },
+    "model": {
+      "type": "string",
+      "pattern": "^claude-[a-z0-9-]{3,60}$"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "appsec_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "files": {
+      "$ref": "#/$defs/hashes",
+      "minProperties": 1
+    },
+    "produced": {
+      "$ref": "#/$defs/hashes"
+    },
+    "verdict": {
+      "const": "allow"
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "sr_ref",
+          "file",
+          "line",
+          "evidence",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]+-[0-9]{3}$"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "sr_ref": {
+            "type": "string",
+            "pattern": "^(SR-[0-9]{3}|NEW|N/A)$"
+          },
+          "file": {
+            "$ref": "#/$defs/path"
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "needs_human": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted-risk",
+              "carried"
+            ]
+          },
+          "exception": {
+            "type": "string",
+            "pattern": "^EXC-[0-9]{3}$"
+          },
+          "owner_ack": {
+            "type": "boolean",
+            "description": "The owner confirmed this accepted risk in the session for this finding (M-23)."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))[A-Za-z0-9._/-]+$"
+    },
+    "hashes": {
+      "type": "object",
+      "maxProperties": 500,
+      "propertyNames": {
+        "$ref": "#/$defs/path"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  }
+}
