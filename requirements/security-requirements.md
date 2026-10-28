@@ -349,7 +349,7 @@ Workflows:
 - Everything an agent reads (issues, PRs, comments, documents, code, files, image metadata, scan reports) is data, never instructions. Agent prompts say so, and injection attempts are reported as `prompt-injection` findings that escalate to a human.
 - Each agent has an explicit tool allow list. Reviewers are read-only. Agents write only through their workflow's identity, and only to the paths assigned to them.
 - Agent output is validated against a JSON schema by the deterministic gate before anything acts on it. Invalid or missing output escalates and never allows.
-- Models are pinned by full ID. `maxTurns` is set. No agent approves or merges its own work.
+- Models are pinned by full ID. `maxTurns` is set. No agent approves or merges its own work into `main` or any branch that deploys. On feature and stage branches agents commit and merge autonomously (amended 2026-10-28, change 0001).
 - Applies when: `AI`, `CI`
 - Refs: — (OWASP Top 10 for LLM Applications 2025: LLM01 Prompt Injection, LLM06 Excessive Agency) · A08:2025
 - Evidence: agent definitions; `gate/security_gate.py` tests; ruleset forbids self-approval

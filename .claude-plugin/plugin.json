@@ -1,8 +1,8 @@
 {
   "name": "appsec-review",
-  "description": "Security requirements auditor, security architect and four narrow read-only code reviewers",
+  "description": "Read-only security reviewers for the local stage loop: requirements auditor, security architect, security code reviewer, workflow/IaC reviewer (security tester dormant)",
   "author": {
     "name": "ai-sdlc-lab"
   },
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

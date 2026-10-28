@@ -1,6 +1,6 @@
-# Threat model: <feature>
+# THREAT-<NNNN>: threat model
 
-<!-- Written by the security-architect reviewer in CI. Do not edit by hand. -->
+<!-- Written by the security-architect; the session writes this file with stage/write_artifact.py. Do not edit by hand. Mitigation IDs (M-01, …) stay stable across rounds and stages. -->
 
 ## Scope and change summary
 
@@ -19,7 +19,7 @@
 |---|---|---|
 
 ## Required mitigations
-| ID | Mitigation | SR / named test | Plan step |
+| ID (M-xx) | Mitigation | SR / named test | Plan step |
 |---|---|---|---|
 
 ## Impact on the existing system
