@@ -30,6 +30,9 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "stage"))
+from common import owner_decides
+from log import event
+
 import exceptions as exc
 
 SCHEMA = json.loads((ROOT / "schemas" / "findings.schema.json").read_text())
@@ -43,7 +46,6 @@ SECURITY = {
 }
 EXIT = {"allow": 0, "block": 1, "escalate": 2, "questions": 3}
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")  # \t and \n allowed
-SR_IN_TEXT = re.compile(r"\bSR-[0-9]{3}\b")
 
 
 def _load(path):
@@ -70,18 +72,12 @@ def classify(reviewer: str, f: dict, entries: list, repo: str) -> tuple[str, str
     """(status, exception id) where status is escalate | questions | block | carried | accepted-risk."""
     if f.get("category") == "prompt-injection":
         return "escalate", None
-    sr = f["sr_ref"]
-    serious = f["blocking"] or f["severity"] in ("high", "critical")
-    text = f"{f['evidence']} {f['recommendation']}"
-    security_relevant = reviewer in SECURITY or sr.startswith("SR-")
-    if security_relevant and (
-        sr.startswith("SR-") or (sr == "NEW" and (serious or f.get("needs_human") or SR_IN_TEXT.search(text)))
-    ):
+    if owner_decides(reviewer, f):
         hit = exc.match(entries, f, repo)
         return ("accepted-risk", hit) if hit else ("escalate", None)
     if f.get("needs_human"):
-        return ("questions", None) if reviewer not in SECURITY else ("escalate", None)
-    if serious or f["severity"] == "medium":
+        return "questions", None
+    if f["blocking"] or f["severity"] in ("high", "critical", "medium"):
         return "block", None
     return "carried", None
 
@@ -163,6 +159,20 @@ def main(argv=None) -> int:
 
     result = evaluate(reviewers, args.sarif, args.repo, args.exceptions, args.redactions)
     print(json.dumps(result, indent=2))
+    outcome = "success" if result["decision"] == "allow" else "failure"
+    name = {"allow": "gate.allow", "block": "gate.block", "questions": "gate.block"}.get(
+        result["decision"], "gate.escalate"
+    )
+    event(
+        name,
+        outcome,
+        service="gate",
+        version="-",
+        actor="gate",
+        request_id="-",
+        reason=result["decision"],
+        stream=sys.stderr,
+    )
     if args.summary:
         with open(args.summary, "a") as fh:
             fh.write(_summary(result))

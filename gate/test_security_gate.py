@@ -245,3 +245,41 @@ def test_redact_private_key_block():
     assert n == 1 and "b3BlbnNzaC1rZXkt" not in out
     out, n = redact("machine github.com login bot password s3cr3t-value")
     assert n == 1 and "s3cr3t-value" not in out
+
+
+def test_gate_accepts_valid_new_exception_with_matching_finding_id(write, tmp_path):
+    p = tmp_path / "e.yml"
+    entry = {
+        "id": "EXC-003",
+        "sr": ["NEW"],
+        "finding_id": "ARC-001",
+        "repo": "dogs-app",
+        "paths": ["docs/specs/0001-upload/SPEC-0001.md"],
+        "reason": "Accepted for the demo.",
+        "approved_by": "owner",
+        "approved": "2026-01-01",
+        "expires": "2026-06-30",
+    }
+    p.write_text(yaml.safe_dump([entry]))
+    import datetime
+
+    gate.exc.date = type(
+        "D",
+        (),
+        {
+            "today": staticmethod(lambda: datetime.date(2026, 3, 1)),
+            "fromisoformat": staticmethod(datetime.date.fromisoformat),
+        },
+    )
+    try:
+        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="high")]}
+        assert run({R: write(doc)}, exceptions=str(p))["decision"] == "allow"
+        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="high", id="ARC-002")]}
+        assert run({R: write(doc)}, exceptions=str(p))["decision"] == "escalate"
+    finally:
+        gate.exc.date = datetime.date
+
+
+def test_security_reviewer_na_finding_escalates(write, no_exceptions):
+    doc = {"reviewer": R, "findings": [finding(sr_ref="N/A", severity="info")]}
+    assert run({R: write(doc)}, exceptions=no_exceptions)["decision"] == "escalate"

@@ -15,6 +15,8 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "gate"))
+sys.path.insert(0, str(ROOT / "stage"))
+from common import SECURITY_REVIEWERS, owner_decides
 from redact import redact
 
 OUTPUT = Draft202012Validator(json.loads((ROOT / "schemas" / "findings.schema.json").read_text()))
@@ -61,10 +63,18 @@ def check(kind: str, path: Path) -> list[str]:
                 f.get("blocking") or f.get("needs_human") or f["severity"] in ("high", "critical")
             ):
                 errs.append(f"{f['id']}: blocking, high or needs-human finding can't be carried")
+            if f["status"] == "carried" and owner_decides(doc["reviewer"], f):
+                errs.append(f"{f['id']}: the owner decides this finding; it can't be carried")
+            if doc["reviewer"] in SECURITY_REVIEWERS and f["sr_ref"] == "N/A":
+                errs.append(f"{f['id']}: a security reviewer must reference an SR or NEW")
+            if f["status"] == "accepted-risk" and not f.get("owner_ack"):
+                errs.append(f"{f['id']}: accepted-risk needs the owner's acknowledgement (owner_ack)")
     return errs
 
 
 def redact_file(path: Path) -> int:
+    if path.stat().st_size > MAX_BYTES:
+        raise ValueError(f"larger than {MAX_BYTES} bytes")
     text, n = redact(path.read_text())
     if n:
         path.write_text(text)
@@ -75,8 +85,13 @@ if __name__ == "__main__":
     if len(sys.argv) != 3 or sys.argv[1] not in ("output", "report"):
         sys.exit(__doc__)
     p = Path(sys.argv[2])
-    n = redact_file(p) if sys.argv[1] == "output" else 0
+    try:
+        n = redact_file(p) if sys.argv[1] == "output" else 0
+    except (OSError, ValueError) as e:
+        sys.exit(f"input.rejected: {e}")
     errs = check(sys.argv[1], p)
+    if n:
+        errs.append(f"{n} credential-like string(s) redacted: escalate to the owner")
     for e in errs:
         print(e, file=sys.stderr)
     print(n)

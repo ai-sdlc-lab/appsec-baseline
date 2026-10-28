@@ -21,6 +21,10 @@ def required_ids(trace: str, threat: str) -> set[str]:
 
 
 def check(trace: str, threat: str, plan: str) -> list[str]:
+    if "## Required mitigations" not in threat or not MITIGATION.search(threat.split("## Required mitigations", 1)[1]):
+        return ["THREAT file has no 'Required mitigations' table with M-xx rows"]
+    if not COVERED.search(trace):
+        return ["TRACE file has no covered SR rows"]
     tested = set()
     for s in steps(plan):
         if s["tests"]:

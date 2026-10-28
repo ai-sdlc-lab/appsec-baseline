@@ -230,7 +230,7 @@ jobs:
           REDACTED: ${{ steps.redact.outputs.count }}
         run: |
           set -uo pipefail
-          python3 -m pip install -q -r .appsec-baseline/gate/requirements.txt
+          python3 -m pip install -q --require-hashes -r .appsec-baseline/gate/requirements.txt
           python3 .appsec-baseline/gate/security_gate.py --reviewer "$REVIEWER=out/review.json" \
             --summary "$GITHUB_STEP_SUMMARY" > out/decision.json
           rc=$?
@@ -255,8 +255,9 @@ jobs:
           set -euo pipefail
           marker="<!-- appsec-review:$REVIEWER -->"
           n=$(jq '.findings | length' out/review.json 2>/dev/null || echo 0)
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -1)
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=$(printf '%s\n' "$ids" | sed -n 1p)
           if [[ "$n" == 0 ]]; then
             [[ -z "$id" ]] || gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null
             exit 0

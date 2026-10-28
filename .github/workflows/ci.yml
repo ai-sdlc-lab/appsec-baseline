@@ -24,8 +24,7 @@ jobs:
         with:
           python-version: "3.14"
       - run: |
-          pip install --quiet --require-hashes -r gate/requirements.txt
-          pip install --quiet -r gate/requirements-dev.txt
+          pip install --quiet --require-hashes -r gate/requirements.txt -r gate/requirements-dev.txt
       - name: Lint and test gate and stage scripts
         run: |
           ruff check --line-length 120 gate stage && ruff format --line-length 120 --check gate stage
@@ -73,7 +72,7 @@ jobs:
           echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
           tar -xzf gitleaks.tgz gitleaks && tar -xzf actionlint.tgz actionlint
           sudo install osv-scanner gitleaks actionlint /usr/local/bin/
-          pip install --quiet zizmor==1.31.1
+          pip install --quiet --require-hashes -r tools/scanners/requirements.txt
       - name: Run scanners
         run: |
           set +e -uo pipefail

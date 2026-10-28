@@ -24,7 +24,8 @@ import named_tests
 import plan_drift
 import structure
 from classify import changed
-from common import STAGE_PREFIX, InputError, change_of, git, load_yaml, safe_path, sha256_file
+from common import STAGE_PREFIX, InputError, change_of, env, git, load_yaml, safe_path, sha256_file
+from log import event
 from render import comment
 from validate import check as validate
 
@@ -34,6 +35,7 @@ MARKER = "<!-- appsec-verify -->"
 LOCK = re.compile(r"^[0-9a-f]{40}$")
 REF_CHANGE = re.compile(r"^(?:stage|feature)/(?P<n>[0-9]{4})-")
 WORKFLOW_IAC = re.compile(r"^(\.github/|infra/)")
+PRODUCES = {("spec", "security-requirements-auditor"): "TRACE", ("spec", "security-architect"): "THREAT"}
 TEMPLATES = {"INT": "INT.md", "SPEC": "SPEC.md", "PLAN": "PLAN.md", "TRACE": "TRACE.md", "THREAT": "THREAT.md"}
 
 
@@ -75,6 +77,8 @@ def required(stages: dict, kind: str, paths: list[str], change: str | None) -> d
         for stage, prefix in STAGE_PREFIX.items():
             if stage != "code" and name == f"{prefix}-{c[0]}.md":
                 need[(c[0], stage)] = list(stages["stages"][stage]["reviewers"])
+        if name in (f"TRACE-{c[0]}.md", f"THREAT-{c[0]}.md"):  # produced at the spec stage (M-05)
+            need[(c[0], "spec")] = list(stages["stages"]["spec"]["reviewers"])
     if kind == "code":
         if not change:
             raise InputError("code changes need a change number in the branch name (stage/NNNN-… or feature/NNNN-…)")
@@ -120,6 +124,9 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
         art = f"{rel_folder}/{STAGE_PREFIX[stage]}-{n}.md"
         if art not in doc["files"]:
             r.fail(f"{rp}: the stage artifact {art} is not among the reviewed files")
+        out = PRODUCES.get((stage, reviewer))
+        if out and f"{rel_folder}/{out}-{n}.md" not in doc["produced"]:
+            r.fail(f"{rp}: {out}-{n}.md must be listed in produced (written from this reviewer's output)")
     else:
         must = [p for p in ctx["paths"] if not p.startswith("docs/") and (head / p).is_file()]
         if reviewer == "workflow-iac-reviewer":
@@ -128,6 +135,8 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
             if p not in doc["files"]:
                 r.fail(f"{rp}: changed file {p} was not reviewed")
     for f in doc["findings"]:
+        if f["file"] not in doc["files"] and f["file"] not in doc["produced"]:
+            r.fail(f"{rp}: {f['id']} points to {f['file']}, which this reviewer didn't review")
         if f["status"] == "accepted-risk":
             hit = exc.match(ctx["exceptions"], f, ctx["repo"])
             if hit != f.get("exception"):
@@ -139,11 +148,12 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
 def run(a) -> Result:
     r = Result()
     head, base = Path(a.head), Path(a.base)
+    bootstrap = False
     try:
         stages, lock, bootstrap = config(base, head, r)
         if a.lock_on_main is not None and not lock_ok(a.lock_on_main):
             r.fail(f"lock {lock[:12]} is not on appsec-baseline main ({a.lock_on_main})")
-        here = git(ROOT, "rev-parse", "HEAD").decode().strip() if (ROOT / ".git").exists() else lock
+        here = git(ROOT, "rev-parse", "HEAD").decode().strip()  # fails closed without a git checkout
         if here != lock:
             r.fail(f"verifier runs at {here[:12]}, lock is {lock[:12]}")
         diff = changed(head, a.base_sha, a.head_sha)
@@ -168,7 +178,8 @@ def run(a) -> Result:
         for rev in reviewers:
             check_report(head, folder, n, stage, rev, lock, ctx, r)
 
-    template_dirs = [head / ".claude/skills/stage/templates", ROOT / "templates"]
+    tpl_src = head if bootstrap else base  # a PR can't weaken the templates that judge it
+    template_dirs = [tpl_src / ".claude/skills/stage/templates", ROOT / "templates"]
     for p in diff["paths"]:
         m = re.match(r"^docs/specs/[0-9]{4}-[a-z0-9-]+/(INT|SPEC|PLAN|TRACE|THREAT)-[0-9]{4}\.md$", p)
         if not m or not (head / p).is_file():
@@ -221,14 +232,21 @@ def main(argv=None) -> int:
     from render import clean
 
     ok = not r.failures
-    lines = [f"## verify: **{'PASS' if ok else 'FAIL'}**", ""]
-    lines += [f"- {clean(x)}" for x in r.failures] + [""] + [f"- {clean(x)}" for x in r.notes]
+    lines = [f"## verify: **{'PASS' if ok else 'FAIL'}**", "", "```text"]
+    lines += [f"FAIL {clean(x)}" for x in r.failures] + [clean(x) for x in r.notes] + ["```"]
     if a.summary:
         with open(a.summary, "a") as fh:
             fh.write("\n".join(lines) + "\n")
+    common = {
+        "service": "verifier",
+        "version": git(ROOT, "rev-parse", "HEAD").decode().strip() if (ROOT / ".git").exists() else "unknown",
+        "actor": "ci",
+        "request_id": env("GITHUB_RUN_ID", "local"),
+    }
     for x in r.failures:
-        print(json.dumps({"event": "verify.fail", "item": clean(x)}))
-    print(json.dumps({"event": "verify.pass" if ok else "verify.fail", "failures": len(r.failures)}))
+        kind = "input.rejected" if x.startswith("input.rejected") else "verify.fail"
+        event(kind, "failure", level="WARN", reason="check_failed", item=x, **common)
+    event("verify.pass" if ok else "verify.fail", "success" if ok else "failure", failures=len(r.failures), **common)
     if a.comment and not ok:
         Path(a.comment).write_text(comment(MARKER, "verify: failed", r.failures))
     return 0 if ok else 1

@@ -32,6 +32,10 @@ def _glob(entry: str) -> re.Pattern:
 
 
 def check(plan_text: str, repo: str, change_dir: str, paths: list[str]) -> list[str]:
+    entries = [f for s in steps(plan_text, repo) for f in s["files"]]
+    catch_all = [f for f in entries if "*" in f.split("/")[0]]
+    if catch_all:
+        return [f"plan entry {f} is a catch-all; list paths under a named directory" for f in catch_all]
     patterns = [
         _glob(f.rstrip("/") + ("/**" if f.endswith("/") else "")) for s in steps(plan_text, repo) for f in s["files"]
     ]

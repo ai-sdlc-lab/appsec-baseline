@@ -57,6 +57,8 @@ jobs:
           set -euo pipefail
           status=$(gh api "repos/ai-sdlc-lab/appsec-baseline/compare/main...$LOCK" --jq .status || echo error)
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          # fail before anything runs from that commit (a fork-network or unmerged commit is refused)
+          [[ "$status" == identical || "$status" == behind ]] || { echo "::error::lock is not on appsec-baseline main ($status)"; exit 1; }
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,8 +104,9 @@ jobs:
         run: |
           set -euo pipefail
           marker="<!-- appsec-verify -->"
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -1)
+          ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=$(printf '%s\n' "$ids" | sed -n 1p)
           if [[ -f "$RUNNER_TEMP/comment.md" ]]; then
             if [[ -n "$id" ]]; then
               gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null

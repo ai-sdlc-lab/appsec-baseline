@@ -132,6 +132,10 @@
           "exception": {
             "type": "string",
             "pattern": "^EXC-[0-9]{3}$"
+          },
+          "owner_ack": {
+            "type": "boolean",
+            "description": "The owner confirmed this accepted risk in the session for this finding (M-23)."
           }
         }
       }

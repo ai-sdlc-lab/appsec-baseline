@@ -30,6 +30,15 @@ def results(junit: Path) -> dict[str, str]:
     raw = junit.read_bytes()
     if len(raw) > MAX_BYTES:
         raise JUnitError("JUnit report larger than 5 MiB")
+    if raw.startswith((b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
+        raise JUnitError("JUnit report must be UTF-8 without a byte-order mark")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise JUnitError("JUnit report is not valid UTF-8") from None
+    decl = re.match(r"<\?xml[^>]*encoding=[\"']([^\"']+)", text)
+    if decl and decl.group(1).lower().replace("_", "-") not in ("utf-8", "utf8"):
+        raise JUnitError("JUnit report declares a non-UTF-8 encoding")
     if FORBIDDEN.search(raw):
         raise JUnitError("JUnit report contains a DOCTYPE or entity declaration")
     try:

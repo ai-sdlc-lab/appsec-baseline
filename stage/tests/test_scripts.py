@@ -176,9 +176,9 @@ THREAT = (
 
 
 def test_crosscheck_fails_on_sr_without_task_and_test():
-    assert crosscheck.check(TRACE + "| SR-031 | MUST | covered | x | y |\n", "", PLAN) == [
-        "SR-031: no plan step with a named test"
-    ]
+    assert crosscheck.check(
+        TRACE + "| SR-031 | MUST | covered | x | y |\n", THREAT.replace("| M-02 | x | y | z |\n", ""), PLAN
+    ) == ["SR-031: no plan step with a named test"]
 
 
 def test_crosscheck_fails_on_threat_mitigation_without_task_and_test():
@@ -390,3 +390,64 @@ def test_agents_match_spec_table():
         fm = _front(ROOT / "agents" / f"{name}.md")
         assert (fm["model"], fm["maxTurns"]) == (model, turns), name
         assert "Untrusted input rule" in (ROOT / "agents" / f"{name}.md").read_text()
+
+
+def test_named_tests_rejects_utf16_doctype(tmp_path):
+    p = tmp_path / "j.xml"
+    p.write_bytes('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE a [<!ENTITY e "v">]><testsuites/>'.encode("utf-16"))
+    assert named_tests.check(PLAN, "dogs-app", p)
+
+
+def test_report_rejects_owner_decided_finding_as_carried(tmp_path):
+    f = {
+        "id": "AUD-001",
+        "severity": "low",
+        "sr_ref": "NEW",
+        "file": "docs/a.md",
+        "line": 1,
+        "status": "carried",
+        "evidence": "This conflicts with SR-020 authorisation.",
+    }
+    doc = report("security-requirements-auditor", "intent", "0001", {"docs/a.md": "0" * 64}, LOCK, [f])
+    assert any("owner decides" in e for e in validate.check("report", _report_file(tmp_path, doc)))
+    doc["findings"][0] |= {"sr_ref": "N/A", "evidence": "plain evidence text here"}
+    assert any("must reference an SR" in e for e in validate.check("report", _report_file(tmp_path, doc)))
+
+
+def test_write_artifact_refuses_credentials(tmp_path):
+    out = tmp_path / "o.json"
+    out.write_text(
+        json.dumps(
+            {"reviewer": "security-architect", "artifact": "# THREAT-0001\nkey AKIAABCDEFGHIJKLMNOP\n", "findings": []}
+        )
+    )
+    (tmp_path / "docs/specs/0001-x").mkdir(parents=True)
+    with pytest.raises(InputError):
+        write_artifact.write(out, tmp_path, "docs/specs/0001-x/THREAT-0001.md")
+
+
+def test_crosscheck_fails_closed_on_format_drift():
+    assert crosscheck.check(TRACE, "## Mitigations\n| M-01 | x |\n", PLAN)
+    assert crosscheck.check("| SR-001 | MUST | Covered | x |\n", THREAT, PLAN)
+
+
+def test_plan_drift_rejects_catch_all_entries():
+    plan = PLAN.replace("`docs/x.md`", "`**/*`")
+    assert "catch-all" in plan_drift.check(plan, "dogs-app", "docs/specs/0001-x", ["Makefile"])[0]
+
+
+def test_exceptions_not_valid_before_approved(tmp_path):
+    assert (
+        exc.valid_entries(_exc_file(tmp_path, approved="2026-12-01", expires="2026-12-31"), today=date(2026, 11, 1))
+        == []
+    )
+
+
+def test_redact_is_linear_on_whitespace():
+    import time
+
+    from redact import redact
+
+    t = time.monotonic()
+    redact("\n" * 200000 + " " * 200000)
+    assert time.monotonic() - t < 2

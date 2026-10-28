@@ -74,7 +74,7 @@ def valid_entries(path: Path = DEFAULT, today: date | None = None) -> list[dict]
         if isinstance(e, dict)
         and not _entry_errors(e)
         and ids.count(e["id"]) == 1
-        and today <= date.fromisoformat(e["expires"])
+        and date.fromisoformat(e["approved"]) <= today <= date.fromisoformat(e["expires"])
     ]
 
 
@@ -83,7 +83,7 @@ def match(entries: list[dict], finding: dict, repo: str) -> str | None:
     for e in entries:
         if e["repo"] != repo or finding.get("sr_ref") not in e["sr"]:
             continue
-        if finding.get("sr_ref") == "NEW" and e.get("finding_id") != finding.get("id"):
+        if (finding.get("sr_ref") == "NEW" or "finding_id" in e) and e.get("finding_id") != finding.get("id"):
             continue
         if any(fnmatchcase(finding.get("file", ""), p) for p in e["paths"]):
             return e["id"]

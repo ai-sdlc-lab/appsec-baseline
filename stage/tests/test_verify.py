@@ -153,7 +153,7 @@ def test_verify_does_not_fall_back_when_base_has_files(repo):
 def test_verify_summary_lists_exceptions_used(repo, monkeypatch):
     entry = {"id": "EXC-009", "sr": ["SR-004"], "repo": "dogs-app", "paths": [INT]}
     monkeypatch.setattr(verify.exc, "valid_entries", lambda *a, **k: [entry])
-    f = sr_finding("accepted-risk", exception="EXC-009")
+    f = sr_finding("accepted-risk", exception="EXC-009", owner_ack=True)
     res = verify.run(args(repo, intent_change(repo, findings=[f])))
     assert res.failures == [] and any("exception used: EXC-009" in n for n in res.notes)
 
@@ -174,3 +174,62 @@ def test_verify_fails_on_edited_threat_file(repo):
     )
     res = verify.run(args(repo, repo.commit(), ref="stage/0001-spec"))
     assert any(f"{threat} changed after review" in f for f in res.failures)
+
+
+def _spec_change(r, produced_for_architect=True, edit_threat_only=False):
+    spec, trace, threat = f"{CH}/SPEC-0001.md", f"{CH}/TRACE-0001.md", f"{CH}/THREAT-0001.md"
+    (r.head / spec).parent.mkdir(parents=True, exist_ok=True)
+    for p, t in ((spec, "# SPEC-0001\n"), (trace, "# TRACE-0001\n"), (threat, "# THREAT-0001\n")):
+        (r.head / p).write_text(t)
+    files = {spec: sha256_file(r.head / spec)}
+    for rev, prod in (
+        ("spec-completeness", {}),
+        ("security-requirements-auditor", {trace: sha256_file(r.head / trace)}),
+        ("security-architect", {threat: sha256_file(r.head / threat)} if produced_for_architect else {}),
+    ):
+        dump(r.head / f"{CH}/reviews/SPEC-0001.{rev}.json", report(rev, "spec", "0001", files, r.lock, produced=prod))
+    sha = r.commit()
+    if edit_threat_only:
+        (r.head / threat).write_text("# THREAT-0001 (edited later, alone)\n")
+        r.base_sha = sha
+        sh(r.base, "checkout", "-q", "--detach", sha)
+        sha = r.commit()
+    return sha
+
+
+def test_verify_requires_produced_threat_and_trace(repo):
+    res = verify.run(args(repo, _spec_change(repo, produced_for_architect=False), ref="stage/0001-spec"))
+    assert any("THREAT-0001.md must be listed in produced" in f for f in res.failures)
+
+
+def test_verify_checks_reports_when_only_threat_changes(repo):
+    res = verify.run(args(repo, _spec_change(repo, edit_threat_only=True), ref="stage/0001-spec"))
+    assert any("THREAT-0001.md changed after review" in f for f in res.failures)
+
+
+def test_verify_uses_base_templates_not_head(repo):
+    # the PR empties its own copy of the template; the base template still applies
+    (repo.head / ".claude/skills/stage/templates/INT.md").write_text("# INT-<NNNN>\n")
+    (repo.head / INT).parent.mkdir(parents=True, exist_ok=True)
+    (repo.head / INT).write_text("# INT-0001: demo\n")
+    for rev in ("intent-completeness", "security-requirements-auditor"):
+        dump(
+            repo.head / f"{CH}/reviews/INT-0001.{rev}.json",
+            report(rev, "intent", "0001", {INT: sha256_file(repo.head / INT)}, repo.lock),
+        )
+    res = verify.run(args(repo, repo.commit(), ref="stage/0001-intent"))
+    assert any("missing section: Problem" in f for f in res.failures)
+
+
+def test_verify_rejects_finding_on_unreviewed_file(repo):
+    f = {
+        "id": "IC-001",
+        "severity": "low",
+        "sr_ref": "N/A",
+        "file": "api/main.py",
+        "line": 1,
+        "evidence": "x" * 30,
+        "status": "carried",
+    }
+    res = verify.run(args(repo, intent_change(repo, findings=[f])))
+    assert any("didn't review" in x for x in res.failures)
