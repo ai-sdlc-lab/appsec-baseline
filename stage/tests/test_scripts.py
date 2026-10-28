@@ -451,3 +451,23 @@ def test_redact_is_linear_on_whitespace():
     t = time.monotonic()
     redact("\n" * 200000 + " " * 200000)
     assert time.monotonic() - t < 2
+
+
+def test_named_tests_rejects_bomless_utf16_doctype(tmp_path):
+    p = tmp_path / "j.xml"
+    p.write_bytes(
+        '<!DOCTYPE a [<!ENTITY x "y">]><testsuites><testsuite><testcase name="test_a"/></testsuite></testsuites>'.encode(
+            "utf-16-le"
+        )
+    )
+    assert named_tests.check(PLAN, "dogs-app", p)
+
+
+def test_workflow_python_runs_isolated():
+    """PR files in the workspace root must never shadow stdlib or pip (IAC-005)."""
+    for name in ("security-review.yml", "verify.yml"):
+        text = (ROOT / ".github/workflows" / name).read_text()
+        for line in text.splitlines():
+            m = re.search(r"\bpython3?\s+(\S+)", line)
+            if m and not line.strip().startswith("#") and "setup-python" not in line:
+                assert m.group(1) == "-I", f"{name}: {line.strip()}"

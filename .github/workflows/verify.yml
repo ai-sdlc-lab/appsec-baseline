@@ -71,7 +71,7 @@ jobs:
         with:
           python-version: "3.14"
 
-      - run: python -m pip install --quiet --require-hashes -r .appsec/gate/requirements.txt
+      - run: python -I -m pip install --quiet --require-hashes -r .appsec/gate/requirements.txt
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true # missing JUnit fails inside verify.py (named tests), not here

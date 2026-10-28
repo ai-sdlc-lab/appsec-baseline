@@ -30,6 +30,8 @@ def results(junit: Path) -> dict[str, str]:
     raw = junit.read_bytes()
     if len(raw) > MAX_BYTES:
         raise JUnitError("JUnit report larger than 5 MiB")
+    if b"\x00" in raw:
+        raise JUnitError("JUnit report contains NUL bytes (only UTF-8 is accepted)")
     if raw.startswith((b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
         raise JUnitError("JUnit report must be UTF-8 without a byte-order mark")
     try:
@@ -42,7 +44,7 @@ def results(junit: Path) -> dict[str, str]:
     if FORBIDDEN.search(raw):
         raise JUnitError("JUnit report contains a DOCTYPE or entity declaration")
     try:
-        root = ET.fromstring(raw)
+        root = ET.fromstring(text)
     except ET.ParseError as e:
         raise JUnitError(f"JUnit report unparseable: {e}") from None
     out: dict[str, str] = {}
