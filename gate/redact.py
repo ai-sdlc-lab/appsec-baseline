@@ -18,6 +18,8 @@ PATTERNS = [
     re.compile(r"(?:AKIA|ASIA)[A-Z0-9]{16}"),  # AWS access key IDs
     re.compile(r"(?i)(aws_secret_access_key|aws_session_token)[\"'\s:=]+[A-Za-z0-9/+=]{16,}"),
     re.compile(r"X-Amz-(?:Signature|Credential|Security-Token)=[^&\s\"']+"),  # presigned URL credentials
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)"),  # PEM keys
+    re.compile(r"(?im)^\s*(?:machine\s+\S+\s+)?(?:login\s+\S+\s+)?password\s+\S+"),  # .netrc entries
 ]
 
 

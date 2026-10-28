@@ -1,5 +1,4 @@
 import pytest
-
 from redact import redact
 
 SECRETS = [

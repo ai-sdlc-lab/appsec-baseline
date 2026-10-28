@@ -243,7 +243,8 @@ jobs:
           echo "decision=$(jq -r .decision out/decision.json)" >> "$GITHUB_OUTPUT"
           exit $rc
 
-      - name: Post report to the PR
+      # Issue #9 / SPEC-0001 §1.7: no finding, no comment. Errors show in the check status and log only.
+      - name: Post findings to the PR (only if there are findings)
         if: always() && github.event_name == 'pull_request' && steps.scope.outputs.files != '0'
         continue-on-error: true # fork PRs get a read-only token
         env:
@@ -253,17 +254,20 @@ jobs:
         run: |
           set -euo pipefail
           marker="<!-- appsec-review:$REVIEWER -->"
-          {
-            echo "$marker"
-            echo "### $REVIEWER: $(jq -r .decision out/decision.json 2>/dev/null || echo error)"
-            echo
-            jq -r '.artifact // empty' out/review.json 2>/dev/null || true
-            echo
-            echo "| ID | Severity | SR | Location | Evidence |"
-            echo "|---|---|---|---|---|"
-            jq -r '.findings[]? | "| \(.id) | \(.severity) | \(.sr_ref) | `\(.file):\(.line // "-")` | \(.evidence | gsub("\\|"; "/") | gsub("\n"; " ") | .[0:300]) |"' out/review.json 2>/dev/null || true
-          } > "$RUNNER_TEMP/comment.md"
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          n=$(jq '.findings | length' out/review.json 2>/dev/null || echo 0)
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -1)
+          if [[ "$n" == 0 ]]; then
+            [[ -z "$id" ]] || gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null
+            exit 0
+          fi
+          jq -r '.findings[] | "\(.id) [\(.severity)] \(.sr_ref) \(.file):\(.line // "-") \(.evidence)"' out/review.json > "$RUNNER_TEMP/items.txt"
+          python3 - "$marker" "$REVIEWER: $(jq -r .decision out/decision.json)" "$RUNNER_TEMP/items.txt" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import sys
+          sys.path.insert(0, ".appsec-baseline/stage")
+          from render import comment
+          print(comment(sys.argv[1], sys.argv[2], open(sys.argv[3]).read().splitlines()))
+          PY
           if [[ -n "$id" ]]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
           else

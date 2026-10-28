@@ -1,0 +1,33 @@
+# Lab rules for SR-022: HTTPS only, certificate validation never disabled (SPEC-0001 §6).
+rules:
+  - id: sr022-requests-verify-false
+    languages: [python]
+    severity: ERROR
+    message: "SR-022: TLS certificate validation disabled (verify=False)"
+    pattern-either:
+      - pattern: requests.$F(..., verify=False, ...)
+      - pattern: httpx.$F(..., verify=False, ...)
+      - pattern: httpx.Client(..., verify=False, ...)
+  - id: sr022-unverified-ssl-context
+    languages: [python]
+    severity: ERROR
+    message: "SR-022: unverified TLS context"
+    pattern-either:
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: ssl.create_default_context(...).check_hostname = False
+  - id: sr022-plain-http-url
+    languages: [python]
+    severity: ERROR
+    message: "SR-022: plain http:// URL (use https://)"
+    patterns:
+      - pattern: '"$URL"'
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ^http://(?!localhost|127\.0\.0\.1)
+  - id: sr022-curl-insecure
+    languages: [bash]
+    severity: ERROR
+    message: "SR-022: curl with certificate validation disabled"
+    pattern-either:
+      - pattern: curl ... --insecure ...
+      - pattern: curl ... -k ...
