@@ -94,13 +94,7 @@ def code_change(r, reviewed, extra_files=()):
 
 
 def test_verify_fails_on_changed_file_missing_from_report(repo):
-    res = verify.run(
-        args(
-            repo,
-            code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]),
-            ref="stage/0001-code",
-        )
-    )
+    res = verify.run(args(repo, code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]), ref="stage/0001-code"))
     assert any("api/main.py was not reviewed" in f for f in res.failures)
 
 
@@ -175,12 +169,7 @@ def test_verify_fails_on_edited_threat_file(repo):
     dump(
         repo.head / f"{CH}/reviews/SPEC-0001.security-architect.json",
         report(
-            "security-architect",
-            "spec",
-            "0001",
-            {spec: sha256_file(repo.head / spec)},
-            repo.lock,
-            produced=produced,
+            "security-architect", "spec", "0001", {spec: sha256_file(repo.head / spec)}, repo.lock, produced=produced
         ),
     )
     res = verify.run(args(repo, repo.commit(), ref="stage/0001-spec"))
@@ -188,31 +177,17 @@ def test_verify_fails_on_edited_threat_file(repo):
 
 
 def _spec_change(r, produced_for_architect=True, edit_threat_only=False):
-    spec, trace, threat = (
-        f"{CH}/SPEC-0001.md",
-        f"{CH}/TRACE-0001.md",
-        f"{CH}/THREAT-0001.md",
-    )
+    spec, trace, threat = f"{CH}/SPEC-0001.md", f"{CH}/TRACE-0001.md", f"{CH}/THREAT-0001.md"
     (r.head / spec).parent.mkdir(parents=True, exist_ok=True)
-    for p, t in (
-        (spec, "# SPEC-0001\n"),
-        (trace, "# TRACE-0001\n"),
-        (threat, "# THREAT-0001\n"),
-    ):
+    for p, t in ((spec, "# SPEC-0001\n"), (trace, "# TRACE-0001\n"), (threat, "# THREAT-0001\n")):
         (r.head / p).write_text(t)
     files = {spec: sha256_file(r.head / spec)}
     for rev, prod in (
         ("spec-completeness", {}),
         ("security-requirements-auditor", {trace: sha256_file(r.head / trace)}),
-        (
-            "security-architect",
-            {threat: sha256_file(r.head / threat)} if produced_for_architect else {},
-        ),
+        ("security-architect", {threat: sha256_file(r.head / threat)} if produced_for_architect else {}),
     ):
-        dump(
-            r.head / f"{CH}/reviews/SPEC-0001.{rev}.json",
-            report(rev, "spec", "0001", files, r.lock, produced=prod),
-        )
+        dump(r.head / f"{CH}/reviews/SPEC-0001.{rev}.json", report(rev, "spec", "0001", files, r.lock, produced=prod))
     sha = r.commit()
     if edit_threat_only:
         (r.head / threat).write_text("# THREAT-0001 (edited later, alone)\n")
@@ -223,13 +198,7 @@ def _spec_change(r, produced_for_architect=True, edit_threat_only=False):
 
 
 def test_verify_requires_produced_threat_and_trace(repo):
-    res = verify.run(
-        args(
-            repo,
-            _spec_change(repo, produced_for_architect=False),
-            ref="stage/0001-spec",
-        )
-    )
+    res = verify.run(args(repo, _spec_change(repo, produced_for_architect=False), ref="stage/0001-spec"))
     assert any("THREAT-0001.md must be listed in produced" in f for f in res.failures)
 
 
