@@ -34,7 +34,6 @@ import exceptions as exc
 MARKER = "<!-- appsec-verify -->"
 LOCK = re.compile(r"^[0-9a-f]{40}$")
 REF_CHANGE = re.compile(r"^(?:stage|feature)/(?P<n>[0-9]{4})-")
-WORKFLOW_IAC = re.compile(r"^(\.github/|infra/)")
 PRODUCES = {("spec", "security-requirements-auditor"): "TRACE", ("spec", "security-architect"): "THREAT"}
 TEMPLATES = {"INT": "INT.md", "SPEC": "SPEC.md", "PLAN": "PLAN.md", "TRACE": "TRACE.md", "THREAT": "THREAT.md"}
 
@@ -82,9 +81,10 @@ def required(stages: dict, kind: str, paths: list[str], change: str | None) -> d
     if kind == "code":
         if not change:
             raise InputError("code changes need a change number in the branch name (stage/NNNN-… or feature/NNNN-…)")
-        revs = list(stages["stages"]["code"]["reviewers"])
-        if any(WORKFLOW_IAC.match(p) for p in paths):
-            revs += list(stages["stages"]["code"].get("conditional", {}))
+        code = stages["stages"]["code"]
+        src = [p for p in paths if not p.startswith("docs/")]
+        revs = list(code.get("reviewers", []))
+        revs += [rev for rev, rx in code.get("conditional", {}).items() if any(re.match(rx, p) for p in src)]
         need[(change, "code")] = revs
     return need
 
@@ -129,8 +129,9 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
             r.fail(f"{rp}: {out}-{n}.md must be listed in produced (written from this reviewer's output)")
     else:
         must = [p for p in ctx["paths"] if not p.startswith("docs/") and (head / p).is_file()]
-        if reviewer == "workflow-iac-reviewer":
-            must = [p for p in must if WORKFLOW_IAC.match(p)]
+        rx = ctx["conditional"].get(reviewer)
+        if rx:  # a path-scoped reviewer must cover exactly its matching files (stages.yml from base)
+            must = [p for p in must if re.match(rx, p)]
         for p in must:
             if p not in doc["files"]:
                 r.fail(f"{rp}: changed file {p} was not reviewed")
@@ -167,6 +168,7 @@ def run(a) -> Result:
     ctx = {
         "paths": diff["paths"],
         "repo": a.repo,
+        "conditional": stages["stages"]["code"].get("conditional", {}),
         "exceptions": exc.valid_entries(ROOT / "exceptions" / "sr-exceptions.yml"),
     }
 
