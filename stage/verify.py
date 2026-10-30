@@ -4,7 +4,7 @@ Inputs are two checkouts of the product repo (PR head and base), the appsec-base
 script runs from (at the lock SHA), and the PR's metadata. Everything read from the head is untrusted.
 
 Usage:
-  verify.py --head DIR --base DIR --base-sha SHA --head-sha SHA --repo NAME --head-ref REF
+  verify.py --head DIR --base DIR --base-sha SHA --head-sha SHA --repo NAME --head-ref REF [--base-ref REF]
             [--junit FILE] [--lock-on-main identical|behind|other] [--summary FILE] [--comment FILE]
 Exit 0 pass, 1 fail. On failure --comment receives an inert PR comment body.
 """
@@ -20,20 +20,31 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 import crosscheck
+import exceptions as exc
 import named_tests
 import plan_drift
 import structure
 from classify import changed
-from common import STAGE_PREFIX, InputError, change_of, env, git, load_yaml, safe_path, sha256_file
+from common import (
+    REPO_EXCEPTIONS,
+    STAGE_PREFIX,
+    InputError,
+    change_of,
+    env,
+    git,
+    is_doc,
+    load_yaml,
+    safe_path,
+    sha256_file,
+)
 from log import event
 from render import comment
 from validate import check as validate
 
-import exceptions as exc
-
 MARKER = "<!-- appsec-verify -->"
 LOCK = re.compile(r"^[0-9a-f]{40}$")
 REF_CHANGE = re.compile(r"^(?:stage|feature)/(?P<n>[0-9]{4})-")
+EXCEPTIONS = REPO_EXCEPTIONS  # the product repo's own exceptions (read from the PR head)
 PRODUCES = {("spec", "security-requirements-auditor"): "TRACE", ("spec", "security-architect"): "THREAT"}
 TEMPLATES = {"INT": "INT.md", "SPEC": "SPEC.md", "PLAN": "PLAN.md", "TRACE": "TRACE.md", "THREAT": "THREAT.md"}
 
@@ -82,7 +93,7 @@ def required(stages: dict, kind: str, paths: list[str], change: str | None) -> d
         if not change:
             raise InputError("code changes need a change number in the branch name (stage/NNNN-… or feature/NNNN-…)")
         code = stages["stages"]["code"]
-        src = [p for p in paths if not p.startswith("docs/")]
+        src = [p for p in paths if not is_doc(p)]
         revs = list(code.get("reviewers", []))
         revs += [rev for rev, rx in code.get("conditional", {}).items() if any(re.match(rx, p) for p in src)]
         need[(change, "code")] = revs
@@ -128,7 +139,7 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
         if out and f"{rel_folder}/{out}-{n}.md" not in doc["produced"]:
             r.fail(f"{rp}: {out}-{n}.md must be listed in produced (written from this reviewer's output)")
     else:
-        must = [p for p in ctx["paths"] if not p.startswith("docs/") and (head / p).is_file()]
+        must = [p for p in ctx["paths"] if not is_doc(p) and (head / p).is_file()]
         rx = ctx["conditional"].get(reviewer)
         if rx:  # a path-scoped reviewer must cover exactly its matching files (stages.yml from base)
             must = [p for p in must if re.match(rx, p)]
@@ -136,10 +147,16 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
             if p not in doc["files"]:
                 r.fail(f"{rp}: changed file {p} was not reviewed")
     for f in doc["findings"]:
+        if f["status"] == "open":
+            msg = f"{rp}: {f['id']} [{f['severity']}] {f['sr_ref']} is open"
+            if ctx["into_main"]:
+                r.fail(msg + " (the owner decides at this merge: merge past it or send the change back)")
+            else:
+                r.notes.append(msg + " (blocks only the merge to main)")
         if f["file"] not in doc["files"] and f["file"] not in doc["produced"]:
             r.fail(f"{rp}: {f['id']} points to {f['file']}, which this reviewer didn't review")
         if f["status"] == "accepted-risk":
-            hit = exc.match(ctx["exceptions"], f, ctx["repo"])
+            hit = exc.match(ctx["exceptions"], f)
             if hit != f.get("exception"):
                 r.fail(f"{rp}: {f['id']} has no valid, unexpired exception")
             else:
@@ -165,12 +182,21 @@ def run(a) -> Result:
         r.fail(f"input.rejected: {e}")
         return r
     r.notes.append(f"diff: {diff['kind']}, {len(diff['paths'])} path(s)")
+    ex_file = head / EXCEPTIONS
+    if ex_file.is_symlink():
+        r.fail(f"{EXCEPTIONS} must be a regular file")
+    elif ex_file.is_file():
+        r.failures += [f"{EXCEPTIONS}: {e}" for e in exc.errors(ex_file)]
     ctx = {
         "paths": diff["paths"],
         "repo": a.repo,
+        "into_main": a.base_ref == "main",
         "conditional": stages["stages"]["code"].get("conditional", {}),
-        "exceptions": exc.valid_entries(ROOT / "exceptions" / "sr-exceptions.yml"),
+        "exceptions": exc.valid_entries(ex_file) if ex_file.is_file() and not ex_file.is_symlink() else [],
     }
+    for e in ctx["exceptions"]:
+        if EXCEPTIONS in diff["paths"]:
+            r.notes.append(f"exception in this PR's {EXCEPTIONS}: {e['id']} {','.join(e['sr'])} by {e['approved_by']}")
 
     for (n, stage), reviewers in sorted(need.items()):
         folder = change_folder(head, n)
@@ -224,6 +250,7 @@ def main(argv=None) -> int:
     for name in ("--head", "--base", "--base-sha", "--head-sha", "--repo"):
         p.add_argument(name, required=True)
     p.add_argument("--head-ref", default="")
+    p.add_argument("--base-ref", default="main", help="PR base branch; open findings fail only into main")
     p.add_argument("--junit")
     p.add_argument("--lock-on-main")
     p.add_argument("--summary")

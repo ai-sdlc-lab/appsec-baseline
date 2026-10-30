@@ -85,12 +85,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
           REPO: ${{ github.event.repository.name }}
           ONMAIN: ${{ steps.onmain.outputs.status }}
         run: |
           set +e -uo pipefail
           python -I -B .appsec/stage/verify.py --head head --base base --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" \
-            --repo "$REPO" --head-ref "$HEAD_REF" --junit junit/junit.xml --lock-on-main "$ONMAIN" \
+            --repo "$REPO" --head-ref "$HEAD_REF" --base-ref "$BASE_REF" --junit junit/junit.xml --lock-on-main "$ONMAIN" \
             --summary "$GITHUB_STEP_SUMMARY" --comment "$RUNNER_TEMP/comment.md"
           echo "rc=$?" >> "$GITHUB_OUTPUT"
 

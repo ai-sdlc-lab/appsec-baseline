@@ -68,7 +68,7 @@ def repo(tmp_path):
     return r
 
 
-def report(reviewer, stage, change, files, lock, findings=(), produced=None):
+def report(reviewer, stage, change, files, lock, findings=(), produced=None, verdict="allow"):
     return {
         "reviewer": reviewer,
         "stage": stage,
@@ -78,7 +78,7 @@ def report(reviewer, stage, change, files, lock, findings=(), produced=None):
         "appsec_sha": lock,
         "files": files,
         "produced": produced or {},
-        "verdict": "allow",
+        "verdict": verdict,
         "findings": list(findings),
     }
 

@@ -64,7 +64,11 @@
       "$ref": "#/$defs/hashes"
     },
     "verdict": {
-      "const": "allow"
+      "enum": [
+        "allow",
+        "open"
+      ],
+      "description": "open: high/critical findings still open after the last fix round; they block only the merge to main"
     },
     "findings": {
       "type": "array",
@@ -126,16 +130,13 @@
             "type": "string",
             "enum": [
               "accepted-risk",
-              "carried"
+              "carried",
+              "open"
             ]
           },
           "exception": {
             "type": "string",
             "pattern": "^EXC-[0-9]{3}$"
-          },
-          "owner_ack": {
-            "type": "boolean",
-            "description": "The owner confirmed this accepted risk in the session for this finding (M-23)."
           }
         }
       }

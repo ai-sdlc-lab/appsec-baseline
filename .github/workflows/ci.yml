@@ -34,8 +34,6 @@ jobs:
           for s in schemas/*.schema.json; do
             python -c "import json,sys,jsonschema; jsonschema.Draft202012Validator.check_schema(json.load(open(sys.argv[1])))" "$s"
           done
-      - name: SR exceptions file is valid (M-12)
-        run: python -I -B stage/exceptions.py exceptions/sr-exceptions.yml
 
   scanners:
     name: scanners

@@ -10,7 +10,7 @@ INT = f"{CH}/INT-0001.md"
 INT_TEXT = "# INT-0001: demo\n\n## Problem\nSomething.\n\n## Out of scope\nNothing.\n"
 
 
-def args(r, head_sha, ref="stage/0001-intent", junit=None, onmain="identical"):
+def args(r, head_sha, ref="stage/0001-intent", junit=None, onmain="identical", base_ref="feature/0001-demo"):
     return argparse.Namespace(
         head=str(r.head),
         base=str(r.base),
@@ -18,12 +18,13 @@ def args(r, head_sha, ref="stage/0001-intent", junit=None, onmain="identical"):
         head_sha=head_sha,
         repo="dogs-app",
         head_ref=ref,
+        base_ref=base_ref,
         junit=junit,
         lock_on_main=onmain,
     )
 
 
-def intent_change(r, edit_after=False, skip=None, findings=None):
+def intent_change(r, edit_after=False, skip=None, findings=None, verdict="allow"):
     (r.head / INT).parent.mkdir(parents=True, exist_ok=True)
     (r.head / INT).write_text(INT_TEXT)
     digest = sha256_file(r.head / INT)
@@ -32,7 +33,7 @@ def intent_change(r, edit_after=False, skip=None, findings=None):
             continue
         dump(
             r.head / f"{CH}/reviews/INT-0001.{rev}.json",
-            report(rev, "intent", "0001", {INT: digest}, r.lock, findings or []),
+            report(rev, "intent", "0001", {INT: digest}, r.lock, findings or [], verdict=verdict),
         )
     if edit_after:
         (r.head / INT).write_text(INT_TEXT + "edited\n")
@@ -150,12 +151,55 @@ def test_verify_does_not_fall_back_when_base_has_files(repo):
     assert not any("BOOTSTRAP" in n for n in res.notes)
 
 
-def test_verify_summary_lists_exceptions_used(repo, monkeypatch):
-    entry = {"id": "EXC-009", "sr": ["SR-004"], "repo": "dogs-app", "paths": [INT]}
-    monkeypatch.setattr(verify.exc, "valid_entries", lambda *a, **k: [entry])
-    f = sr_finding("accepted-risk", exception="EXC-009", owner_ack=True)
+def _repo_exceptions(r, **over):
+    from datetime import date, timedelta
+
+    import yaml
+
+    today = date.today()
+    e = {
+        "id": "EXC-009",
+        "sr": ["SR-004"],
+        "paths": [INT],
+        "reason": "Not fixable in three rounds; tracked for the next change.",
+        "approved_by": "agent",
+        "approved": today.isoformat(),
+        "expires": (today + timedelta(days=30)).isoformat(),
+    } | over
+    (r.head / "security").mkdir(exist_ok=True)
+    (r.head / "security/exceptions.yml").write_text(yaml.safe_dump([e]))
+
+
+def test_verify_uses_the_repos_own_exceptions(repo):
+    _repo_exceptions(repo)
+    f = sr_finding("accepted-risk", exception="EXC-009")
     res = verify.run(args(repo, intent_change(repo, findings=[f])))
     assert res.failures == [] and any("exception used: EXC-009" in n for n in res.notes)
+    assert any("EXC-009 SR-004 by agent" in n for n in res.notes)
+
+
+def test_verify_rejects_agent_exception_over_90_days(repo):
+    from datetime import date, timedelta
+
+    _repo_exceptions(repo, expires=(date.today() + timedelta(days=120)).isoformat())
+    res = verify.run(args(repo, intent_change(repo, findings=[sr_finding("accepted-risk", exception="EXC-009")])))
+    assert any("security/exceptions.yml: EXC-009" in f and "90 days" in f for f in res.failures)
+
+
+def test_verify_rejects_accepted_high_finding(repo):
+    _repo_exceptions(repo)
+    f = sr_finding("accepted-risk", exception="EXC-009", severity="high")
+    res = verify.run(args(repo, intent_change(repo, findings=[f])))
+    assert any("invalid" in x for x in res.failures)
+
+
+def test_verify_open_finding_blocks_only_the_merge_to_main(repo):
+    f = sr_finding("open", severity="high")
+    sha = intent_change(repo, findings=[f], verdict="open")
+    into_feature = verify.run(args(repo, sha))
+    assert into_feature.failures == [] and any("is open" in n for n in into_feature.notes)
+    into_main = verify.run(args(repo, sha, ref="feature/0001-demo", base_ref="main"))
+    assert any("is open" in x and "owner decides" in x for x in into_main.failures)
 
 
 def test_verify_fails_on_edited_threat_file(repo):

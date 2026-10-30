@@ -1,7 +1,8 @@
 """Changed paths of a PR and its kind: docs or code (SPEC-0001 §2.5 step 4, M-01, M-15). Fail-closed.
 
 Reads `git diff -z --raw -M BASE...HEAD` (NUL-separated, so quoted or odd names can't split).
-docs-only iff every path, both sides of renames and deletions included, starts with `docs/`,
+docs-only iff every path, both sides of renames and deletions included, is under `docs/` or is
+`security/exceptions.yml` (common.is_doc),
 and no entry is a symlink (120000), a submodule (160000) or a type change. Anything else: code.
 
 Usage: classify.py REPO BASE HEAD   prints {"kind": "docs"|"code", "paths": [...]}
@@ -12,7 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import git
+from common import git, is_doc
 
 SPECIAL_MODES = {"120000", "160000"}
 
@@ -35,8 +36,7 @@ def parse_raw(raw: bytes) -> list[dict]:
 def classify(entries: list[dict]) -> dict:
     paths = sorted({p for e in entries for p in e["paths"]})
     docs = bool(entries) and all(
-        e["status"] != "T" and not (e["modes"] & SPECIAL_MODES) and all(p.startswith("docs/") for p in e["paths"])
-        for e in entries
+        e["status"] != "T" and not (e["modes"] & SPECIAL_MODES) and all(is_doc(p) for p in e["paths"]) for e in entries
     )
     return {"kind": "docs" if docs else "code", "paths": paths}
 

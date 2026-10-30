@@ -68,7 +68,6 @@ def _exceptions(tmp_path, expires="2026-12-31", today_ok=True):
                 {
                     "id": "EXC-001",
                     "sr": ["SR-015"],
-                    "repo": "dogs-app",
                     "paths": ["docs/specs/0001-upload/SPEC-0001.md"],
                     "reason": "Accepted for the demo.",
                     "approved_by": "owner",
@@ -152,7 +151,6 @@ def test_gate_new_finding_accept_requires_exception(write, tmp_path):
                     "id": "EXC-002",
                     "sr": ["NEW"],
                     "finding_id": "ARC-001",
-                    "repo": "dogs-app",
                     "paths": ["docs/specs/0001-upload/SPEC-0001.md"],
                     "reason": "Accepted for the demo.",
                     "approved_by": "owner",
@@ -162,7 +160,7 @@ def test_gate_new_finding_accept_requires_exception(write, tmp_path):
             ]
         )
     )
-    doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="high")]}
+    doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="medium", blocking=True)]}
     assert run({R: write(doc)}, exceptions=str(tmp_path / "none.yml"))["decision"] == "escalate"
     # the entry above is invalid (over 180 days), so it doesn't count either
     assert run({R: write(doc)}, exceptions=str(p))["decision"] == "escalate"
@@ -254,7 +252,6 @@ def test_gate_accepts_valid_new_exception_with_matching_finding_id(write, tmp_pa
         "id": "EXC-003",
         "sr": ["NEW"],
         "finding_id": "ARC-001",
-        "repo": "dogs-app",
         "paths": ["docs/specs/0001-upload/SPEC-0001.md"],
         "reason": "Accepted for the demo.",
         "approved_by": "owner",
@@ -273,9 +270,9 @@ def test_gate_accepts_valid_new_exception_with_matching_finding_id(write, tmp_pa
         },
     )
     try:
-        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="high")]}
+        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="medium", blocking=True)]}
         assert run({R: write(doc)}, exceptions=str(p))["decision"] == "allow"
-        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="high", id="ARC-002")]}
+        doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="medium", blocking=True, id="ARC-002")]}
         assert run({R: write(doc)}, exceptions=str(p))["decision"] == "escalate"
     finally:
         gate.exc.date = datetime.date
@@ -284,3 +281,18 @@ def test_gate_accepts_valid_new_exception_with_matching_finding_id(write, tmp_pa
 def test_security_reviewer_na_finding_escalates(write, no_exceptions):
     doc = {"reviewer": R, "findings": [finding(sr_ref="N/A", severity="info")]}
     assert run({R: write(doc)}, exceptions=no_exceptions)["decision"] == "escalate"
+
+
+def test_gate_never_accepts_high_with_exception(write, tmp_path):
+    p = tmp_path / "e.yml"
+    entry = {
+        "id": "EXC-004",
+        "sr": ["SR-015"],
+        "paths": ["docs/specs/0001-upload/SPEC-0001.md"],
+        "reason": "Accepted for the demo.",
+        "approved_by": "owner",
+        "approved": "2026-01-01",
+        "expires": "2099-01-01",
+    }
+    p.write_text(yaml.safe_dump([entry]))
+    assert gate.classify(R, finding(severity="high"), [entry], "dogs-app") == ("escalate", None)

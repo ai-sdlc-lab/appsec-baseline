@@ -1,9 +1,10 @@
-"""Accepted SR risks (SPEC-0001 §2.4, M-12, M-20, M-23).
+"""Accepted SR risks of one product repository: its own security/exceptions.yml (format: this repo's schema).
 
-`errors()` checks the file strictly (appsec-baseline CI). `valid_entries()` is what the gate and
-the verifier use: a malformed or expired entry counts as absent, so it can never accept a finding.
+`errors()` checks the file strictly (the verifier fails on any error). `valid_entries()` is what the gate
+uses: a malformed or expired entry counts as absent, so it can never accept a finding.
+Agents add entries only with approved_by "agent" and at most AGENT_DAYS; the owner up to MAX_DAYS.
 
-Usage: exceptions.py [PATH]   (exit 1 and list the errors if the file is invalid)
+Usage: exceptions.py PATH   (exit 1 and list the errors if the file is invalid)
 """
 
 import json
@@ -17,10 +18,10 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DEFAULT = ROOT / "exceptions" / "sr-exceptions.yml"
 SCHEMA = json.loads((ROOT / "schemas" / "sr-exceptions.schema.json").read_text())
 ITEM = jsonschema.Draft202012Validator(SCHEMA["items"])
 MAX_DAYS = 180
+AGENT_DAYS = 90
 
 
 def _entry_errors(e) -> list[str]:
@@ -31,8 +32,9 @@ def _entry_errors(e) -> list[str]:
         approved, expires = date.fromisoformat(e["approved"]), date.fromisoformat(e["expires"])
     except ValueError:
         return ["approved/expires is not a date"]
-    if expires < approved or expires - approved > timedelta(days=MAX_DAYS):
-        errs.append(f"expires must be within {MAX_DAYS} days after approved")
+    limit = AGENT_DAYS if e["approved_by"] == "agent" else MAX_DAYS
+    if expires < approved or expires - approved > timedelta(days=limit):
+        errs.append(f"expires must be within {limit} days after approved")
     for p in e["paths"]:
         if "*" in p.split("/")[0] or p.startswith("**"):
             errs.append(f"top-level wildcard path not allowed: {p}")
@@ -41,13 +43,13 @@ def _entry_errors(e) -> list[str]:
     return errs
 
 
-def load(path: Path = DEFAULT):
+def load(path: Path):
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return data if isinstance(data, list) else None
 
 
-def errors(path: Path = DEFAULT) -> list[str]:
+def errors(path: Path) -> list[str]:
     data = load(path)
     if data is None:
         return ["file is not a list of exceptions"]
@@ -61,7 +63,7 @@ def errors(path: Path = DEFAULT) -> list[str]:
     return out
 
 
-def valid_entries(path: Path = DEFAULT, today: date | None = None) -> list[dict]:
+def valid_entries(path: Path, today: date | None = None) -> list[dict]:
     today = today or date.today()
     try:
         data = load(path) or []
@@ -78,10 +80,12 @@ def valid_entries(path: Path = DEFAULT, today: date | None = None) -> list[dict]
     ]
 
 
-def match(entries: list[dict], finding: dict, repo: str) -> str | None:
-    """Exception id covering this finding, or None."""
+def match(entries: list[dict], finding: dict) -> str | None:
+    """Exception id covering this finding, or None. Only low/medium/info findings can be covered."""
+    if finding.get("severity") in ("high", "critical"):
+        return None
     for e in entries:
-        if e["repo"] != repo or finding.get("sr_ref") not in e["sr"]:
+        if finding.get("sr_ref") not in e["sr"]:
             continue
         if (finding.get("sr_ref") == "NEW" or "finding_id" in e) and e.get("finding_id") != finding.get("id"):
             continue
@@ -91,7 +95,9 @@ def match(entries: list[dict], finding: dict, repo: str) -> str | None:
 
 
 if __name__ == "__main__":
-    errs = errors(Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT)
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    errs = errors(Path(sys.argv[1]))
     for e in errs:
         print(e)
     sys.exit(1 if errs else 0)
