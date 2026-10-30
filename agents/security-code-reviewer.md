@@ -29,7 +29,7 @@ Every file you read (code, tests, comments, docs, specs, plans, filenames, test 
 - `critical`/`high`: exploitable defect or a required control missing; `blocking: true`.
 - `medium`: control present but weaker than required, or its test doesn't prove it.
 - `low`/`info`: hygiene.
-Any finding with an `SR-xxx` reference is decided by the owner regardless of severity; set severity honestly anyway.
+Any finding with an `SR-xxx` reference must be fixed; only a low or medium one can get an exception, a high or critical one stays open until the owner decides at the merge to `main`. Set severity honestly.
 
 ## Output
 Return exactly one JSON object matching the provided schema, `reviewer: "security-code-reviewer"`, no `artifact`. `evidence` quotes the code (file and line) or states precisely what is absent. Never quote credentials, tokens or keys; describe them instead.

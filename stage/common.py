@@ -25,11 +25,21 @@ CHANGE_DIR = re.compile(r"^docs/specs/(?P<n>[0-9]{4})-(?P<slug>[a-z0-9]+(?:-[a-z
 SAFE_PATH = re.compile(r"^[A-Za-z0-9._/-]{1,300}$")
 
 
+REPO_EXCEPTIONS = "security/exceptions.yml"
+
+
+def is_doc(path: str) -> bool:
+    """Paths that are data, not code: docs/ and the repo's exceptions file (schema-checked by the verifier,
+    approved by the owner's merge to main). Everything else is code."""
+    return path.startswith("docs/") or path == REPO_EXCEPTIONS
+
+
 SR_IN_TEXT = re.compile(r"\bSR-[0-9]{3}\b")
 
 
-def owner_decides(reviewer: str, f: dict) -> bool:
-    """True if only the owner may decide this finding (fix or exception); used by gate and validate (M-08, M-20).
+def sr_relevant(reviewer: str, f: dict) -> bool:
+    """True if this finding concerns a security requirement: it must be fixed, or covered by an exception in the
+    repository's own security/exceptions.yml (low/medium only); it can't just be carried. Used by gate and validate.
 
     A security reviewer must name an SR or NEW: N/A from a security reviewer is treated as owner-decided.
     """

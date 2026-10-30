@@ -10,7 +10,7 @@ AppSec-owned security baseline for the AI-native S-SDLC lab (`ai-sdlc-lab`). App
 | `skills/` | Checklists preloaded into `security-code-reviewer` and `security-tester`: `injection-input`, `authn-authz`, `secrets-pii-logging` |
 | `schemas/` | `findings.schema.json` (reviewer output), `review-report.schema.json` (committed review reports), `sr-exceptions.schema.json` |
 | *When they run* | Locally, per stage of a change (product repo `stages.yml`). CI runs no AI: `.github/workflows/verify.yml` checks the committed reports, scripts and scanners |
-| `exceptions/` | `sr-exceptions.yml` (owner-accepted SR risks, max 180 days) and scanner exceptions, read at the pinned commit so a PR cannot add its own |
+| (no exceptions here) | Exceptions are per repository: each product repo keeps `security/exceptions.yml` (format: `schemas/sr-exceptions.schema.json`) and `security/trivyignore`. Agents add entries only for low/medium findings (`approved_by: agent`, ≤ 90 days); every entry reaches `main` only through the owner's merge |
 | `gate/security_gate.py` | Deterministic allow / block / questions / escalate over reviewer outputs and SARIF; sets each finding's status; any SR finding goes to the owner |
 | `stage/` | Scripts of the stage loop and the CI verifier: validate, hash, write_artifact, structure, crosscheck, plan_drift, named_tests, classify, verify, log, render |
 | `semgrep/` | Lab Semgrep rules (TLS: no `http://`, no disabled certificate checks) |

@@ -6,7 +6,8 @@ schema-invalid or control-character-laden output escalates; it is never allowed.
 
 Rules per finding:
 - prompt-injection category                                   -> escalate
-- security reviewer, sr_ref SR-xxx                            -> escalate, unless a valid exception matches (accepted-risk)
+- security reviewer, sr_ref SR-xxx                            -> escalate, unless a valid exception matches (accepted-risk;
+                                                                 low/medium only)
 - security reviewer, sr_ref NEW and blocking / high / critical /
   needs_human / an "SR-nnn" in its text                       -> escalate, unless an exception with finding_id matches
 - non-security reviewer, needs_human                          -> questions (the owner answers)
@@ -30,10 +31,9 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "stage"))
-from common import owner_decides
-from log import event
-
 import exceptions as exc
+from common import sr_relevant
+from log import event
 
 SCHEMA = json.loads((ROOT / "schemas" / "findings.schema.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA)
@@ -72,8 +72,8 @@ def classify(reviewer: str, f: dict, entries: list, repo: str) -> tuple[str, str
     """(status, exception id) where status is escalate | questions | block | carried | accepted-risk."""
     if f.get("category") == "prompt-injection":
         return "escalate", None
-    if owner_decides(reviewer, f):
-        hit = exc.match(entries, f, repo)
+    if sr_relevant(reviewer, f):
+        hit = exc.match(entries, f)
         return ("accepted-risk", hit) if hit else ("escalate", None)
     if f.get("needs_human"):
         return "questions", None
@@ -85,7 +85,7 @@ def classify(reviewer: str, f: dict, entries: list, repo: str) -> tuple[str, str
 def evaluate(reviewers: dict, sarifs: list, repo: str = "", exceptions_path=None, redactions: int = 0) -> dict:
     out = {k: [] for k in ("escalate", "questions", "block", "notes")}
     statuses = {}
-    entries = exc.valid_entries(Path(exceptions_path)) if exceptions_path else exc.valid_entries()
+    entries = exc.valid_entries(Path(exceptions_path)) if exceptions_path else []
     if redactions:
         out["escalate"].append(f"{redactions} credential-like string(s) redacted from reviewer output")
 
@@ -145,7 +145,7 @@ def main(argv=None) -> int:
     p.add_argument("--reviewer", action="append", default=[], metavar="NAME=PATH", help="expected reviewer output")
     p.add_argument("--sarif", action="append", default=[], metavar="PATH")
     p.add_argument("--repo", default="")
-    p.add_argument("--exceptions", help="sr-exceptions.yml (default: this checkout's)")
+    p.add_argument("--exceptions", help="the product repo's security/exceptions.yml (default: none)")
     p.add_argument("--redactions", type=int, default=0, help="number of redactions applied to reviewer output")
     p.add_argument("--summary", help="append a markdown summary to this file")
     args = p.parse_args(argv)

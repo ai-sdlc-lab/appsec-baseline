@@ -2,22 +2,63 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ai-sdlc-lab/appsec-baseline/schemas/sr-exceptions.schema.json",
   "title": "Accepted security-requirement risks",
-  "description": "exceptions/sr-exceptions.yml (SPEC-0001 §2.4, M-12, M-20, M-23). Only the owner merges changes. Lifetime and path rules are checked by stage/exceptions.py.",
+  "description": "A product repository's own exceptions file, security/exceptions.yml (one per repository). Agents may add entries only for low/medium findings, approved_by 'agent', expiry within 90 days; every entry reaches main only through the owner's merge. Lifetime and path rules are checked by stage/exceptions.py.",
   "type": "array",
   "items": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["id", "sr", "repo", "paths", "reason", "approved_by", "approved", "expires"],
+    "required": [
+      "id",
+      "sr",
+      "paths",
+      "reason",
+      "approved_by",
+      "approved",
+      "expires"
+    ],
     "properties": {
-      "id": {"type": "string", "pattern": "^EXC-[0-9]{3}$"},
-      "sr": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^(SR-[0-9]{3}|NEW)$"}},
-      "finding_id": {"type": "string", "pattern": "^[A-Z]+-[0-9]{3}$"},
-      "repo": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,100}$"},
-      "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[A-Za-z0-9._/*-]{1,300}$"}},
-      "reason": {"type": "string", "minLength": 10, "maxLength": 1000},
-      "approved_by": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,39}$"},
-      "approved": {"type": "string", "format": "date"},
-      "expires": {"type": "string", "format": "date"}
+      "id": {
+        "type": "string",
+        "pattern": "^EXC-[0-9]{3}$"
+      },
+      "sr": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "pattern": "^(SR-[0-9]{3}|NEW)$"
+        }
+      },
+      "finding_id": {
+        "type": "string",
+        "pattern": "^[A-Z]+-[0-9]{3}$"
+      },
+      "paths": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/*-]{1,300}$"
+        }
+      },
+      "reason": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 1000
+      },
+      "approved_by": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9-]{1,39}$",
+        "description": "'agent' for entries the SDLC workflow adds, else the owner's GitHub login"
+      },
+      "approved": {
+        "type": "string",
+        "format": "date"
+      },
+      "expires": {
+        "type": "string",
+        "format": "date"
+      }
     }
   }
 }

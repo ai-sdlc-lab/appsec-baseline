@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "gate"))
 sys.path.insert(0, str(ROOT / "stage"))
-from common import SECURITY_REVIEWERS, owner_decides
+from common import SECURITY_REVIEWERS, sr_relevant
 from redact import redact
 
 OUTPUT = Draft202012Validator(json.loads((ROOT / "schemas" / "findings.schema.json").read_text()))
@@ -54,21 +54,26 @@ def check(kind: str, path: Path) -> list[str]:
     if any(_CONTROL.search(s) for s in _strings(doc)):
         errs.append("control characters in strings")
     if kind == "report" and not errs:
+        has_open = any(f["status"] == "open" for f in doc["findings"])
+        if (doc["verdict"] == "open") != has_open:
+            errs.append("verdict must be 'open' exactly when a finding is open")
         for f in doc["findings"]:
             if f["status"] == "accepted-risk" and "exception" not in f:
                 errs.append(f"{f['id']}: accepted-risk without exception id")
-            if f["sr_ref"].startswith("SR-") and f["status"] != "accepted-risk":
-                errs.append(f"{f['id']}: SR finding must be accepted-risk with an exception")
+            if f["sr_ref"].startswith("SR-") and f["status"] not in ("accepted-risk", "open"):
+                errs.append(f"{f['id']}: SR finding must be accepted-risk with an exception, or open")
+            if f["status"] == "accepted-risk" and f["severity"] in ("high", "critical"):
+                errs.append(f"{f['id']}: a high or critical finding can't be accepted by an agent; it stays open")
+            if f["status"] == "open" and f["severity"] not in ("high", "critical"):
+                errs.append(f"{f['id']}: only high or critical findings stay open; fix it or add an exception")
             if f["status"] == "carried" and (
                 f.get("blocking") or f.get("needs_human") or f["severity"] in ("high", "critical")
             ):
                 errs.append(f"{f['id']}: blocking, high or needs-human finding can't be carried")
-            if f["status"] == "carried" and owner_decides(doc["reviewer"], f):
+            if f["status"] == "carried" and sr_relevant(doc["reviewer"], f):
                 errs.append(f"{f['id']}: the owner decides this finding; it can't be carried")
             if doc["reviewer"] in SECURITY_REVIEWERS and f["sr_ref"] == "N/A":
                 errs.append(f"{f['id']}: a security reviewer must reference an SR or NEW")
-            if f["status"] == "accepted-risk" and not f.get("owner_ack"):
-                errs.append(f"{f['id']}: accepted-risk needs the owner's acknowledgement (owner_ack)")
     return errs
 
 
@@ -91,7 +96,7 @@ if __name__ == "__main__":
         sys.exit(f"input.rejected: {e}")
     errs = check(sys.argv[1], p)
     if n:
-        errs.append(f"{n} credential-like string(s) redacted: escalate to the owner")
+        errs.append(f"{n} credential-like string(s) redacted: list it as open in the final PR")
     for e in errs:
         print(e, file=sys.stderr)
     print(n)

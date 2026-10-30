@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import crosscheck
+import exceptions as exc
 import named_tests
 import plan_drift
 import pytest
@@ -19,8 +20,6 @@ from conftest import ROOT, report
 from hash import hashes
 from log import REQUIRED, event
 from render import clean, comment
-
-import exceptions as exc
 
 LOCK = "a" * 40
 
@@ -99,7 +98,6 @@ def _exc_file(tmp_path, **over):
     e = {
         "id": "EXC-001",
         "sr": ["SR-002"],
-        "repo": "dogs-app",
         "paths": [".github/workflows/deploy.yml"],
         "reason": "A documented lab reason.",
         "approved_by": "owner",
@@ -143,10 +141,16 @@ def test_gate_ignores_malformed_exception(tmp_path):
     assert len(exc.valid_entries(_exc_file(tmp_path), today=date(2026, 11, 1))) == 1
 
 
-def test_exc001_scoped_to_deploy_yml_and_expires():
-    entries = [e for e in exc.load() if e["id"] == "EXC-001"]
-    assert exc.errors() == []
-    assert entries[0]["paths"] == [".github/workflows/deploy.yml"] and entries[0]["expires"] == "2026-12-31"
+def test_exceptions_agent_entries_limited_to_90_days(tmp_path):
+    assert exc.errors(_exc_file(tmp_path, approved_by="agent", expires="2027-01-31"))
+    assert not exc.errors(_exc_file(tmp_path, approved_by="agent", expires="2026-12-31"))
+
+
+def test_exceptions_never_cover_high_or_critical():
+    e = {"id": "EXC-001", "sr": ["SR-004"], "paths": ["api/main.py"]}
+    f = {"id": "SCR-001", "sr_ref": "SR-004", "file": "api/main.py"}
+    assert exc.match([e], f | {"severity": "medium"}) == "EXC-001"
+    assert exc.match([e], f | {"severity": "high"}) is None
 
 
 # --- structure / crosscheck / plan drift / named tests (A-05) ------------------------------
@@ -229,6 +233,13 @@ def _raw(*entries):
 
 def test_classify_docs_only():
     assert classify(parse_raw(_raw(("100644", "100644", "M", ["docs/a.md"]))))["kind"] == "docs"
+
+
+def test_classify_repo_exceptions_file_is_data_trivyignore_is_code():
+    ok = _raw(("100644", "100644", "M", ["docs/a.md"]), ("100644", "100644", "M", ["security/exceptions.yml"]))
+    assert classify(parse_raw(ok))["kind"] == "docs"
+    for p in ("security/trivyignore", "security/exceptions.yml.bak", "x/security/exceptions.yml"):
+        assert classify(parse_raw(_raw(("100644", "100644", "M", [p]))))["kind"] == "code", p
 
 
 def test_classify_rename_out_of_api_is_code():
