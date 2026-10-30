@@ -233,3 +233,34 @@ def test_verify_rejects_finding_on_unreviewed_file(repo):
     }
     res = verify.run(args(repo, intent_change(repo, findings=[f])))
     assert any("didn't review" in x for x in res.failures)
+
+
+PATH_SCOPED = {"reviewers": [], "conditional": {"security-code-reviewer": "^(?!\\.github/|infra/)", "workflow-iac-reviewer": "^(\\.github/|infra/)"}}
+
+
+def path_scoped(r):
+    import yaml
+
+    s = yaml.safe_load((r.base / "stages.yml").read_text())
+    s["stages"]["code"] = PATH_SCOPED
+    (r.base / "stages.yml").write_text(yaml.safe_dump(s))
+
+
+def test_verify_workflow_only_change_needs_no_code_reviewer(repo):
+    path_scoped(repo)
+    (repo.head / ".github/workflows").mkdir(parents=True)
+    (repo.head / ".github/workflows/x.yml").write_text("x: 1\n")
+    (repo.head / f"{CH}/reviews").mkdir(parents=True)
+    (repo.head / f"{CH}/PLAN-0001.md").write_text("# PLAN-0001\n")
+    sha = repo.commit()
+    need = verify.required(verify.load_yaml(repo.base / "stages.yml"), "code", [".github/workflows/x.yml", f"{CH}/PLAN-0001.md"], "0001")
+    assert need[("0001", "code")] == ["workflow-iac-reviewer"]
+    res = verify.run(args(repo, sha, ref="stage/0001-code"))
+    assert not any("security-code-reviewer" in f for f in res.failures)
+
+
+def test_verify_path_scoped_reviewer_must_cover_its_files(repo):
+    path_scoped(repo)
+    res = verify.run(args(repo, code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]), ref="stage/0001-code"))
+    assert any("api/main.py was not reviewed" in f for f in res.failures)
+    assert not any("workflow-iac-reviewer" in f for f in res.failures)
