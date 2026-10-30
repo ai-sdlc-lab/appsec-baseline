@@ -50,9 +50,7 @@ def test_verify_fails_on_stale_report(repo):
 
 
 def test_verify_fails_on_missing_reviewer_report(repo):
-    res = verify.run(
-        args(repo, intent_change(repo, skip="security-requirements-auditor"))
-    )
+    res = verify.run(args(repo, intent_change(repo, skip="security-requirements-auditor")))
     assert any("missing report" in f for f in res.failures)
 
 
@@ -60,13 +58,9 @@ def test_verify_reads_stages_from_base_not_head(repo):
     import yaml
 
     stages = yaml.safe_load((repo.head / "stages.yml").read_text())
-    stages["stages"]["intent"]["reviewers"] = [
-        "intent-completeness"
-    ]  # PR drops a reviewer
+    stages["stages"]["intent"]["reviewers"] = ["intent-completeness"]  # PR drops a reviewer
     (repo.head / "stages.yml").write_text(yaml.safe_dump(stages))
-    res = verify.run(
-        args(repo, intent_change(repo, skip="security-requirements-auditor"))
-    )
+    res = verify.run(args(repo, intent_change(repo, skip="security-requirements-auditor")))
     assert any("security-requirements-auditor" in f for f in res.failures)
 
 
@@ -111,9 +105,7 @@ def test_verify_fails_on_changed_file_missing_from_report(repo):
 
 
 def test_verify_requires_workflow_iac_report_when_github_changed(repo):
-    sha = code_change(
-        repo, reviewed=["api/main.py"], extra_files=[".github/workflows/x.yml"]
-    )
+    sha = code_change(repo, reviewed=["api/main.py"], extra_files=[".github/workflows/x.yml"])
     res = verify.run(args(repo, sha, ref="stage/0001-code"))
     assert any("CODE-0001.workflow-iac-reviewer.json" in f for f in res.failures)
 
@@ -242,9 +234,7 @@ def test_verify_requires_produced_threat_and_trace(repo):
 
 
 def test_verify_checks_reports_when_only_threat_changes(repo):
-    res = verify.run(
-        args(repo, _spec_change(repo, edit_threat_only=True), ref="stage/0001-spec")
-    )
+    res = verify.run(args(repo, _spec_change(repo, edit_threat_only=True), ref="stage/0001-spec"))
     assert any("THREAT-0001.md changed after review" in f for f in res.failures)
 
 
@@ -256,9 +246,7 @@ def test_verify_uses_base_templates_not_head(repo):
     for rev in ("intent-completeness", "security-requirements-auditor"):
         dump(
             repo.head / f"{CH}/reviews/INT-0001.{rev}.json",
-            report(
-                rev, "intent", "0001", {INT: sha256_file(repo.head / INT)}, repo.lock
-            ),
+            report(rev, "intent", "0001", {INT: sha256_file(repo.head / INT)}, repo.lock),
         )
     res = verify.run(args(repo, repo.commit(), ref="stage/0001-intent"))
     assert any("missing section: Problem" in f for f in res.failures)
