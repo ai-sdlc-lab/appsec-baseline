@@ -50,7 +50,9 @@ def test_verify_fails_on_stale_report(repo):
 
 
 def test_verify_fails_on_missing_reviewer_report(repo):
-    res = verify.run(args(repo, intent_change(repo, skip="security-requirements-auditor")))
+    res = verify.run(
+        args(repo, intent_change(repo, skip="security-requirements-auditor"))
+    )
     assert any("missing report" in f for f in res.failures)
 
 
@@ -58,9 +60,13 @@ def test_verify_reads_stages_from_base_not_head(repo):
     import yaml
 
     stages = yaml.safe_load((repo.head / "stages.yml").read_text())
-    stages["stages"]["intent"]["reviewers"] = ["intent-completeness"]  # PR drops a reviewer
+    stages["stages"]["intent"]["reviewers"] = [
+        "intent-completeness"
+    ]  # PR drops a reviewer
     (repo.head / "stages.yml").write_text(yaml.safe_dump(stages))
-    res = verify.run(args(repo, intent_change(repo, skip="security-requirements-auditor")))
+    res = verify.run(
+        args(repo, intent_change(repo, skip="security-requirements-auditor"))
+    )
     assert any("security-requirements-auditor" in f for f in res.failures)
 
 
@@ -94,12 +100,20 @@ def code_change(r, reviewed, extra_files=()):
 
 
 def test_verify_fails_on_changed_file_missing_from_report(repo):
-    res = verify.run(args(repo, code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]), ref="stage/0001-code"))
+    res = verify.run(
+        args(
+            repo,
+            code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]),
+            ref="stage/0001-code",
+        )
+    )
     assert any("api/main.py was not reviewed" in f for f in res.failures)
 
 
 def test_verify_requires_workflow_iac_report_when_github_changed(repo):
-    sha = code_change(repo, reviewed=["api/main.py"], extra_files=[".github/workflows/x.yml"])
+    sha = code_change(
+        repo, reviewed=["api/main.py"], extra_files=[".github/workflows/x.yml"]
+    )
     res = verify.run(args(repo, sha, ref="stage/0001-code"))
     assert any("CODE-0001.workflow-iac-reviewer.json" in f for f in res.failures)
 
@@ -169,7 +183,12 @@ def test_verify_fails_on_edited_threat_file(repo):
     dump(
         repo.head / f"{CH}/reviews/SPEC-0001.security-architect.json",
         report(
-            "security-architect", "spec", "0001", {spec: sha256_file(repo.head / spec)}, repo.lock, produced=produced
+            "security-architect",
+            "spec",
+            "0001",
+            {spec: sha256_file(repo.head / spec)},
+            repo.lock,
+            produced=produced,
         ),
     )
     res = verify.run(args(repo, repo.commit(), ref="stage/0001-spec"))
@@ -177,17 +196,31 @@ def test_verify_fails_on_edited_threat_file(repo):
 
 
 def _spec_change(r, produced_for_architect=True, edit_threat_only=False):
-    spec, trace, threat = f"{CH}/SPEC-0001.md", f"{CH}/TRACE-0001.md", f"{CH}/THREAT-0001.md"
+    spec, trace, threat = (
+        f"{CH}/SPEC-0001.md",
+        f"{CH}/TRACE-0001.md",
+        f"{CH}/THREAT-0001.md",
+    )
     (r.head / spec).parent.mkdir(parents=True, exist_ok=True)
-    for p, t in ((spec, "# SPEC-0001\n"), (trace, "# TRACE-0001\n"), (threat, "# THREAT-0001\n")):
+    for p, t in (
+        (spec, "# SPEC-0001\n"),
+        (trace, "# TRACE-0001\n"),
+        (threat, "# THREAT-0001\n"),
+    ):
         (r.head / p).write_text(t)
     files = {spec: sha256_file(r.head / spec)}
     for rev, prod in (
         ("spec-completeness", {}),
         ("security-requirements-auditor", {trace: sha256_file(r.head / trace)}),
-        ("security-architect", {threat: sha256_file(r.head / threat)} if produced_for_architect else {}),
+        (
+            "security-architect",
+            {threat: sha256_file(r.head / threat)} if produced_for_architect else {},
+        ),
     ):
-        dump(r.head / f"{CH}/reviews/SPEC-0001.{rev}.json", report(rev, "spec", "0001", files, r.lock, produced=prod))
+        dump(
+            r.head / f"{CH}/reviews/SPEC-0001.{rev}.json",
+            report(rev, "spec", "0001", files, r.lock, produced=prod),
+        )
     sha = r.commit()
     if edit_threat_only:
         (r.head / threat).write_text("# THREAT-0001 (edited later, alone)\n")
@@ -198,12 +231,20 @@ def _spec_change(r, produced_for_architect=True, edit_threat_only=False):
 
 
 def test_verify_requires_produced_threat_and_trace(repo):
-    res = verify.run(args(repo, _spec_change(repo, produced_for_architect=False), ref="stage/0001-spec"))
+    res = verify.run(
+        args(
+            repo,
+            _spec_change(repo, produced_for_architect=False),
+            ref="stage/0001-spec",
+        )
+    )
     assert any("THREAT-0001.md must be listed in produced" in f for f in res.failures)
 
 
 def test_verify_checks_reports_when_only_threat_changes(repo):
-    res = verify.run(args(repo, _spec_change(repo, edit_threat_only=True), ref="stage/0001-spec"))
+    res = verify.run(
+        args(repo, _spec_change(repo, edit_threat_only=True), ref="stage/0001-spec")
+    )
     assert any("THREAT-0001.md changed after review" in f for f in res.failures)
 
 
@@ -215,7 +256,9 @@ def test_verify_uses_base_templates_not_head(repo):
     for rev in ("intent-completeness", "security-requirements-auditor"):
         dump(
             repo.head / f"{CH}/reviews/INT-0001.{rev}.json",
-            report(rev, "intent", "0001", {INT: sha256_file(repo.head / INT)}, repo.lock),
+            report(
+                rev, "intent", "0001", {INT: sha256_file(repo.head / INT)}, repo.lock
+            ),
         )
     res = verify.run(args(repo, repo.commit(), ref="stage/0001-intent"))
     assert any("missing section: Problem" in f for f in res.failures)
@@ -235,7 +278,13 @@ def test_verify_rejects_finding_on_unreviewed_file(repo):
     assert any("didn't review" in x for x in res.failures)
 
 
-PATH_SCOPED = {"reviewers": [], "conditional": {"security-code-reviewer": "^(?!\\.github/|infra/)", "workflow-iac-reviewer": "^(\\.github/|infra/)"}}
+PATH_SCOPED = {
+    "reviewers": [],
+    "conditional": {
+        "security-code-reviewer": "^(?!\\.github/|infra/)",
+        "workflow-iac-reviewer": "^(\\.github/|infra/)",
+    },
+}
 
 
 def path_scoped(r):
@@ -253,7 +302,12 @@ def test_verify_workflow_only_change_needs_no_code_reviewer(repo):
     (repo.head / f"{CH}/reviews").mkdir(parents=True)
     (repo.head / f"{CH}/PLAN-0001.md").write_text("# PLAN-0001\n")
     sha = repo.commit()
-    need = verify.required(verify.load_yaml(repo.base / "stages.yml"), "code", [".github/workflows/x.yml", f"{CH}/PLAN-0001.md"], "0001")
+    need = verify.required(
+        verify.load_yaml(repo.base / "stages.yml"),
+        "code",
+        [".github/workflows/x.yml", f"{CH}/PLAN-0001.md"],
+        "0001",
+    )
     assert need[("0001", "code")] == ["workflow-iac-reviewer"]
     res = verify.run(args(repo, sha, ref="stage/0001-code"))
     assert not any("security-code-reviewer" in f for f in res.failures)
@@ -261,6 +315,12 @@ def test_verify_workflow_only_change_needs_no_code_reviewer(repo):
 
 def test_verify_path_scoped_reviewer_must_cover_its_files(repo):
     path_scoped(repo)
-    res = verify.run(args(repo, code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]), ref="stage/0001-code"))
+    res = verify.run(
+        args(
+            repo,
+            code_change(repo, reviewed=[f"{CH}/PLAN-0001.md"]),
+            ref="stage/0001-code",
+        )
+    )
     assert any("api/main.py was not reviewed" in f for f in res.failures)
     assert not any("workflow-iac-reviewer" in f for f in res.failures)
