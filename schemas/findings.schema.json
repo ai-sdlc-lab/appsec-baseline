@@ -111,6 +111,10 @@
         "needs_human": {
           "type": "boolean",
           "description": "Only the owner can supply the fact (product decision)."
+        },
+        "pre_existing": {
+          "type": "boolean",
+          "description": "true when the gap already exists on main in code or behaviour this change doesn't alter (old debt). Deferred to a GitHub issue; it doesn't block the change."
         }
       }
     }

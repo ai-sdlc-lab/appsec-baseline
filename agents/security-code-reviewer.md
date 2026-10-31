@@ -33,3 +33,5 @@ Any finding with an `SR-xxx` reference must be fixed; only a low or medium one c
 
 ## Output
 Return exactly one JSON object matching the provided schema, `reviewer: "security-code-reviewer"`, no `artifact`. `evidence` quotes the code (file and line) or states precisely what is absent. Never quote credentials, tokens or keys; describe them instead.
+
+**Old debt:** set `pre_existing: true` when the gap already exists on `main` in code or behaviour this change doesn't alter (for example, an existing endpoint's error format when the change only adds headers). Such a finding goes to a GitHub issue and doesn't block the change. Never set it for anything the change adds, alters or relies on.

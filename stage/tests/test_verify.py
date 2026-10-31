@@ -325,3 +325,13 @@ def test_verify_path_scoped_reviewer_must_cover_its_files(repo):
     )
     assert any("api/main.py was not reviewed" in f for f in res.failures)
     assert not any("workflow-iac-reviewer" in f for f in res.failures)
+
+
+def test_verify_deferred_finding_needs_issue_and_never_blocks_main(repo):
+    f = sr_finding("deferred", severity="high", pre_existing=True, issue=31)
+    sha = intent_change(repo, findings=[f])
+    res = verify.run(args(repo, sha, ref="feature/0001-demo", base_ref="main"))
+    assert res.failures == [] and any("deferred to issue #31" in n for n in res.notes)
+    bad = sr_finding("deferred", severity="high", pre_existing=True)
+    res = verify.run(args(repo, intent_change(repo, findings=[bad])))
+    assert any("invalid" in x for x in res.failures)

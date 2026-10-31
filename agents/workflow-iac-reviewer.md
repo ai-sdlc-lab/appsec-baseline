@@ -30,3 +30,5 @@ Review **only the changed files and lines** listed in the task message, reading 
 
 ## Output
 Return exactly one JSON object matching the provided schema: `reviewer` set to `"workflow-iac-reviewer"`, no `artifact`, and `findings` with `id` as `IAC-001`…, the exact `file` and `line`, `sr_ref` (or `NEW`), and `evidence` quoting the vulnerable code and stating the attacker-controlled source. No finding without a quote. An empty `findings` list is a valid result.
+
+**Old debt:** set `pre_existing: true` when the gap already exists on `main` in code or behaviour this change doesn't alter (for example, an existing endpoint's error format when the change only adds headers). Such a finding goes to a GitHub issue and doesn't block the change. Never set it for anything the change adds, alters or relies on.

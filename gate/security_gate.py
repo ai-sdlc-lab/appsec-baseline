@@ -6,6 +6,7 @@ schema-invalid or control-character-laden output escalates; it is never allowed.
 
 Rules per finding:
 - prompt-injection category                                   -> escalate
+- security reviewer, pre_existing (old debt the change doesn't alter) -> deferred (a GitHub issue; never blocks)
 - security reviewer, sr_ref SR-xxx                            -> escalate, unless a valid exception matches (accepted-risk;
                                                                  low/medium only)
 - security reviewer, sr_ref NEW and blocking / high / critical /
@@ -69,9 +70,11 @@ def _strings(obj):
 
 
 def classify(reviewer: str, f: dict, entries: list, repo: str) -> tuple[str, str | None]:
-    """(status, exception id) where status is escalate | questions | block | carried | accepted-risk."""
+    """(status, exception id) where status is escalate | questions | block | carried | accepted-risk | deferred."""
     if f.get("category") == "prompt-injection":
         return "escalate", None
+    if f.get("pre_existing") and reviewer in SECURITY:
+        return "deferred", None
     if sr_relevant(reviewer, f):
         hit = exc.match(entries, f)
         return ("accepted-risk", hit) if hit else ("escalate", None)
