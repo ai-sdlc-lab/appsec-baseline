@@ -42,3 +42,5 @@ Return exactly one JSON object matching the provided schema:
 - `findings`: one per missing or weak requirement. `id` as `AUD-001`…; `file` and `line` point to where it should have been addressed (use the artifact path and the closest section line; `line: null` if none). `evidence` must quote the artifact or state precisely what is absent.
 
 Do not invent coverage. Never mark a requirement covered without citing where.
+
+**Old debt:** set `pre_existing: true` when the gap already exists on `main` in code or behaviour this change doesn't alter (for example, an existing endpoint's error format when the change only adds headers). Such a finding goes to a GitHub issue and doesn't block the change. Never set it for anything the change adds, alters or relies on.

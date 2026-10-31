@@ -296,3 +296,14 @@ def test_gate_never_accepts_high_with_exception(write, tmp_path):
     }
     p.write_text(yaml.safe_dump([entry]))
     assert gate.classify(R, finding(severity="high"), [entry], "dogs-app") == ("escalate", None)
+
+
+def test_gate_defers_pre_existing_security_finding(write, no_exceptions):
+    doc = {"reviewer": R, "findings": [finding(severity="high", pre_existing=True)]}
+    r = run({R: write(doc)}, exceptions=no_exceptions)
+    assert r["decision"] == "allow" and r["statuses"][f"{R}/ARC-001"]["status"] == "deferred"
+
+
+def test_gate_pre_existing_never_hides_prompt_injection(write, no_exceptions):
+    doc = {"reviewer": R, "findings": [finding(category="prompt-injection", pre_existing=True)]}
+    assert run({R: write(doc)}, exceptions=no_exceptions)["decision"] == "escalate"

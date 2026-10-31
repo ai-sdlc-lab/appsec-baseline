@@ -147,6 +147,10 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
             if p not in doc["files"]:
                 r.fail(f"{rp}: changed file {p} was not reviewed")
     for f in doc["findings"]:
+        if f["status"] == "deferred":
+            r.notes.append(
+                f"{rp}: {f['id']} [{f['severity']}] {f['sr_ref']} deferred to issue #{f.get('issue')} (old debt)"
+            )
         if f["status"] == "open":
             msg = f"{rp}: {f['id']} [{f['severity']}] {f['sr_ref']} is open"
             if ctx["into_main"]:
