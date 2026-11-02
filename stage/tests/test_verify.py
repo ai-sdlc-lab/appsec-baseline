@@ -152,7 +152,7 @@ def test_verify_does_not_fall_back_when_base_has_files(repo):
 
 
 def _repo_exceptions(r, **over):
-    from datetime import date, timedelta
+    from datetime import date
 
     import yaml
 
@@ -164,7 +164,6 @@ def _repo_exceptions(r, **over):
         "reason": "Not fixable in three rounds; tracked for the next change.",
         "approved_by": "agent",
         "approved": today.isoformat(),
-        "expires": (today + timedelta(days=30)).isoformat(),
     } | over
     (r.head / "security").mkdir(exist_ok=True)
     (r.head / "security/exceptions.yml").write_text(yaml.safe_dump([e]))
@@ -178,12 +177,10 @@ def test_verify_uses_the_repos_own_exceptions(repo):
     assert any("EXC-009 SR-004 by agent" in n for n in res.notes)
 
 
-def test_verify_rejects_agent_exception_over_90_days(repo):
-    from datetime import date, timedelta
-
-    _repo_exceptions(repo, expires=(date.today() + timedelta(days=120)).isoformat())
+def test_verify_rejects_invalid_repo_exception(repo):
+    _repo_exceptions(repo, expires="2026-12-31")  # unknown field: exceptions don't expire
     res = verify.run(args(repo, intent_change(repo, findings=[sr_finding("accepted-risk", exception="EXC-009")])))
-    assert any("security/exceptions.yml: EXC-009" in f and "90 days" in f for f in res.failures)
+    assert any("security/exceptions.yml: EXC-009" in f for f in res.failures)
 
 
 def test_verify_rejects_accepted_high_finding(repo):

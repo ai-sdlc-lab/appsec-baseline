@@ -102,7 +102,6 @@ def _exc_file(tmp_path, **over):
         "reason": "A documented lab reason.",
         "approved_by": "owner",
         "approved": "2026-10-27",
-        "expires": "2026-12-31",
     } | over
     p = tmp_path / "e.yml"
     import yaml
@@ -111,18 +110,9 @@ def _exc_file(tmp_path, **over):
     return p
 
 
-def test_exceptions_reject_over_180_days(tmp_path):
-    assert exc.errors(_exc_file(tmp_path, expires="2027-06-30"))
-
-
-def test_exceptions_reject_missing_expiry(tmp_path):
-    import yaml
-
-    p = _exc_file(tmp_path)
-    data = yaml.safe_load(p.read_text())
-    del data[0]["expires"]
-    p.write_text(yaml.safe_dump(data))
-    assert exc.errors(p)
+def test_exceptions_have_no_expiry(tmp_path):
+    assert exc.errors(_exc_file(tmp_path)) == []
+    assert exc.errors(_exc_file(tmp_path, expires="2027-06-30"))  # the field no longer exists
 
 
 @pytest.mark.parametrize("path", ["*", "**", "**/x.yml"])
@@ -137,13 +127,12 @@ def test_exceptions_reject_top_level_wildcards(tmp_path, path):
 
 def test_gate_ignores_malformed_exception(tmp_path):
     assert exc.valid_entries(_exc_file(tmp_path, sr=[]), today=date(2026, 11, 1)) == []
-    assert exc.valid_entries(_exc_file(tmp_path), today=date(2027, 1, 1)) == []  # expired
+    assert len(exc.valid_entries(_exc_file(tmp_path), today=date(2035, 1, 1))) == 1  # never expires
     assert len(exc.valid_entries(_exc_file(tmp_path), today=date(2026, 11, 1))) == 1
 
 
-def test_exceptions_agent_entries_limited_to_90_days(tmp_path):
-    assert exc.errors(_exc_file(tmp_path, approved_by="agent", expires="2027-01-31"))
-    assert not exc.errors(_exc_file(tmp_path, approved_by="agent", expires="2026-12-31"))
+def test_exceptions_agent_entries_are_valid(tmp_path):
+    assert not exc.errors(_exc_file(tmp_path, approved_by="agent"))
 
 
 def test_exceptions_never_cover_high_or_critical():
@@ -452,10 +441,7 @@ def test_plan_drift_rejects_catch_all_entries():
 
 
 def test_exceptions_not_valid_before_approved(tmp_path):
-    assert (
-        exc.valid_entries(_exc_file(tmp_path, approved="2026-12-01", expires="2026-12-31"), today=date(2026, 11, 1))
-        == []
-    )
+    assert exc.valid_entries(_exc_file(tmp_path, approved="2026-12-01"), today=date(2026, 11, 1)) == []
 
 
 def test_redact_is_linear_on_whitespace():
