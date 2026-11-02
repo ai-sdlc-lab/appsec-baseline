@@ -1,15 +1,15 @@
 """Accepted SR risks of one product repository: its own security/exceptions.yml (format: this repo's schema).
 
 `errors()` checks the file strictly (the verifier fails on any error). `valid_entries()` is what the gate
-uses: a malformed or expired entry counts as absent, so it can never accept a finding.
-Agents add entries only with approved_by "agent" and at most AGENT_DAYS; the owner up to MAX_DAYS.
+uses: a malformed entry counts as absent, so it can never accept a finding. Exceptions don't expire
+(owner decision 2026-11-02); agents add entries only with approved_by "agent", for low/medium findings.
 
 Usage: exceptions.py PATH   (exit 1 and list the errors if the file is invalid)
 """
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date
 from fnmatch import fnmatchcase
 from pathlib import Path
 
@@ -20,8 +20,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SCHEMA = json.loads((ROOT / "schemas" / "sr-exceptions.schema.json").read_text())
 ITEM = jsonschema.Draft202012Validator(SCHEMA["items"])
-MAX_DAYS = 180
-AGENT_DAYS = 90
 
 
 def _entry_errors(e) -> list[str]:
@@ -29,12 +27,9 @@ def _entry_errors(e) -> list[str]:
     if errs:
         return errs
     try:
-        approved, expires = date.fromisoformat(e["approved"]), date.fromisoformat(e["expires"])
+        date.fromisoformat(e["approved"])
     except ValueError:
-        return ["approved/expires is not a date"]
-    limit = AGENT_DAYS if e["approved_by"] == "agent" else MAX_DAYS
-    if expires < approved or expires - approved > timedelta(days=limit):
-        errs.append(f"expires must be within {limit} days after approved")
+        return ["approved is not a date"]
     for p in e["paths"]:
         if "*" in p.split("/")[0] or p.startswith("**"):
             errs.append(f"top-level wildcard path not allowed: {p}")
@@ -76,7 +71,7 @@ def valid_entries(path: Path, today: date | None = None) -> list[dict]:
         if isinstance(e, dict)
         and not _entry_errors(e)
         and ids.count(e["id"]) == 1
-        and date.fromisoformat(e["approved"]) <= today <= date.fromisoformat(e["expires"])
+        and date.fromisoformat(e["approved"]) <= today
     ]
 
 

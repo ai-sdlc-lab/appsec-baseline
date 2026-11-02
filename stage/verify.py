@@ -162,7 +162,7 @@ def check_report(head: Path, folder: Path, n: str, stage: str, reviewer: str, lo
         if f["status"] == "accepted-risk":
             hit = exc.match(ctx["exceptions"], f)
             if hit != f.get("exception"):
-                r.fail(f"{rp}: {f['id']} has no valid, unexpired exception")
+                r.fail(f"{rp}: {f['id']} has no valid exception")
             else:
                 r.notes.append(f"exception used: {hit} for {reviewer} {f['id']} ({f['sr_ref']})")
 

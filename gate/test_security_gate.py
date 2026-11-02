@@ -60,7 +60,7 @@ def test_gate_escalates_any_sr_finding(write, no_exceptions, over):
     assert r["decision"] == "escalate"
 
 
-def _exceptions(tmp_path, expires="2026-12-31", today_ok=True):
+def _exceptions(tmp_path):
     p = tmp_path / "e.yml"
     p.write_text(
         yaml.safe_dump(
@@ -72,7 +72,6 @@ def _exceptions(tmp_path, expires="2026-12-31", today_ok=True):
                     "reason": "Accepted for the demo.",
                     "approved_by": "owner",
                     "approved": "2026-10-27",
-                    "expires": expires,
                 }
             ]
         )
@@ -80,7 +79,7 @@ def _exceptions(tmp_path, expires="2026-12-31", today_ok=True):
     return str(p)
 
 
-def test_gate_accepts_matching_unexpired_exception(write, tmp_path, monkeypatch):
+def test_gate_accepts_matching_exception(write, tmp_path, monkeypatch):
     monkeypatch.setattr(
         gate.exc,
         "date",
@@ -100,7 +99,7 @@ def test_gate_accepts_matching_unexpired_exception(write, tmp_path, monkeypatch)
     }
 
 
-def test_gate_escalates_expired_exception(write, tmp_path, monkeypatch):
+def test_gate_exceptions_never_expire(write, tmp_path, monkeypatch):
     monkeypatch.setattr(
         gate.exc,
         "date",
@@ -108,13 +107,13 @@ def test_gate_escalates_expired_exception(write, tmp_path, monkeypatch):
             "D",
             (),
             {
-                "today": staticmethod(lambda: __import__("datetime").date(2027, 1, 2)),
+                "today": staticmethod(lambda: __import__("datetime").date(2035, 1, 2)),
                 "fromisoformat": staticmethod(__import__("datetime").date.fromisoformat),
             },
         ),
     )
     r = run({R: write({"reviewer": R, "findings": [finding()]})}, exceptions=_exceptions(tmp_path))
-    assert r["decision"] == "escalate"
+    assert r["decision"] == "allow"
 
 
 def test_gate_escalates_prompt_injection(write, no_exceptions):
@@ -162,7 +161,7 @@ def test_gate_new_finding_accept_requires_exception(write, tmp_path):
     )
     doc = {"reviewer": R, "findings": [finding(sr_ref="NEW", severity="medium", blocking=True)]}
     assert run({R: write(doc)}, exceptions=str(tmp_path / "none.yml"))["decision"] == "escalate"
-    # the entry above is invalid (over 180 days), so it doesn't count either
+    # the entry above is invalid (unknown field 'expires'), so it doesn't count either
     assert run({R: write(doc)}, exceptions=str(p))["decision"] == "escalate"
 
 
@@ -256,7 +255,6 @@ def test_gate_accepts_valid_new_exception_with_matching_finding_id(write, tmp_pa
         "reason": "Accepted for the demo.",
         "approved_by": "owner",
         "approved": "2026-01-01",
-        "expires": "2026-06-30",
     }
     p.write_text(yaml.safe_dump([entry]))
     import datetime
