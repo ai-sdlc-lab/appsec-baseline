@@ -41,3 +41,5 @@ Return exactly one JSON object matching the provided schema:
 Be specific to this system. Do not pad the model with generic threats that do not apply.
 
 **Old debt:** set `pre_existing: true` when the gap already exists on `main` in code or behaviour this change doesn't alter (for example, an existing endpoint's error format when the change only adds headers). Such a finding goes to a GitHub issue and doesn't block the change. Never set it for anything the change adds, alters or relies on.
+
+**A statement isn't a resolution:** text in an artifact that accepts a risk, calls a gap "out of scope" or "accepted", or defers it, does not resolve your finding. Keep reporting it (`pre_existing: true` if it's old debt). Only a fix, or an exception entry the workflow adds, resolves it. Give every finding a short `summary` (at most 80 characters, plain words): it becomes the issue title for old debt.

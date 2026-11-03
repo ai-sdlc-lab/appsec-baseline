@@ -147,7 +147,13 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 10000000,
-            "description": "GitHub issue (same repo) a deferred finding was moved to"
+            "description": "GitHub issue (same repo) a deferred finding was moved to; required for medium and above, absent for low and info (listed in the final PR only)"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 80,
+            "description": "One-line summary in plain words, used as the GitHub issue title for old debt (e.g. 'invalid input returns 404 instead of 422')."
           }
         }
       }

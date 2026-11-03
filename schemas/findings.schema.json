@@ -115,6 +115,12 @@
         "pre_existing": {
           "type": "boolean",
           "description": "true when the gap already exists on main in code or behaviour this change doesn't alter (old debt). Deferred to a GitHub issue; it doesn't block the change."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 80,
+          "description": "One-line summary in plain words, used as the GitHub issue title for old debt (e.g. 'invalid input returns 404 instead of 422')."
         }
       }
     }
