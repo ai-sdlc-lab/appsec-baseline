@@ -329,6 +329,13 @@ def test_verify_deferred_finding_needs_issue_and_never_blocks_main(repo):
     sha = intent_change(repo, findings=[f])
     res = verify.run(args(repo, sha, ref="feature/0001-demo", base_ref="main"))
     assert res.failures == [] and any("deferred to issue #31" in n for n in res.notes)
-    bad = sr_finding("deferred", severity="high", pre_existing=True)
+    bad = sr_finding("deferred", severity="high", pre_existing=True)  # high without its issue
     res = verify.run(args(repo, intent_change(repo, findings=[bad])))
     assert any("invalid" in x for x in res.failures)
+
+
+def test_verify_deferred_low_needs_no_issue_medium_does(repo):
+    low = sr_finding("deferred", severity="low", pre_existing=True)
+    assert verify.run(args(repo, intent_change(repo, findings=[low]))).failures == []
+    med = sr_finding("deferred", severity="medium", pre_existing=True, summary="invalid input returns 404 not 422")
+    assert any("invalid" in x for x in verify.run(args(repo, intent_change(repo, findings=[med]))).failures)

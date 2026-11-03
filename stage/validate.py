@@ -62,8 +62,10 @@ def check(kind: str, path: Path) -> list[str]:
                 errs.append(f"{f['id']}: accepted-risk without exception id")
             if f["sr_ref"].startswith("SR-") and f["status"] not in ("accepted-risk", "open", "deferred"):
                 errs.append(f"{f['id']}: SR finding must be accepted-risk with an exception, open, or deferred")
-            if f["status"] == "deferred" and not (f.get("pre_existing") and f.get("issue")):
-                errs.append(f"{f['id']}: deferred needs pre_existing: true and the GitHub issue number")
+            if f["status"] == "deferred" and not f.get("pre_existing"):
+                errs.append(f"{f['id']}: deferred needs pre_existing: true")
+            if f["status"] == "deferred" and f["severity"] not in ("low", "info") and not f.get("issue"):
+                errs.append(f"{f['id']}: deferred medium or higher needs its GitHub issue number")
             if f["status"] == "accepted-risk" and f["severity"] in ("high", "critical"):
                 errs.append(f"{f['id']}: a high or critical finding can't be accepted by an agent; it stays open")
             if f["status"] == "open" and f["severity"] not in ("high", "critical"):
