@@ -172,7 +172,7 @@ Authentication is delegated to a managed OpenID Connect provider; the applicatio
 ### SR-017 MFA on every account, phishing-resistant for privileged access (MUST)
 Every account has MFA: application users, administrators, and the lab's operator accounts (AWS root and IAM users, GitHub, the Anthropic Console).
 - **Allowed factors:** FIDO2/WebAuthn (passkeys, hardware security keys), and TOTP per RFC 6238.
-- **Privileged and administrative accounts MUST use FIDO2/WebAuthn**; TOTP is allowed only for non-privileged users.
+- **Privileged and administrative accounts MUST use FIDO2/WebAuthn**; TOTP is allowed only for non-privileged users. A password is allowed as a first factor next to the passkey where the identity provider requires it (Amazon Cognito; owner's decision 2026-11-21).
 - **Not allowed:** SMS, voice calls, email codes, and push approvals without number matching.
 - Biometrics only unlock a device-bound authenticator; they are never a factor on their own.
 - There are no default, shared or generic accounts. Each factor can be revoked when lost.
