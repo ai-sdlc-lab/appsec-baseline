@@ -100,7 +100,7 @@ API responses with user-specific data carry `Cache-Control: no-store`. No CORS h
 - Evidence: botocore `Config` with timeouts and retries in code; test with a failing S3 stub asserting `503`
 
 ### SR-007 Resource and abuse limits (MUST)
-- Function timeout ≤ 10 s; memory fixed in IaC.
+- Function timeout ≤ 240 s (lab value; changed 2026-11-21 from 10 s by the owner); memory fixed in IaC. Every outbound call has its own shorter deadline.
 - Endpoints that write or do heavy work SHOULD enforce a per-identity rate limit (lab value: 10 writes per user per minute) where the platform allows it.
 - Concurrency MUST be capped per function once the account quota permits reserved concurrency.
 - Applies when: `WRITE`, `FILE`, `ENDPOINT`
@@ -184,13 +184,12 @@ Every account has MFA: application users, administrators, and the lab's operator
 ### SR-018 Token validation (MUST)
 Every bearer token is validated before use:
 - the signature is checked against keys fetched only from the provider's pre-configured JWKS URL;
-- the algorithm is on an allow list: `ES256`, `EdDSA` or `PS256`. `none`, the HMAC algorithms and `RS256` are rejected;
+- the algorithm is on an allow list: `ES256`, `EdDSA`, `PS256` or `RS256` (RS256 allowed by the owner 2026-11-21). `none` and the HMAC algorithms are rejected;
 - `iss` matches exactly; `aud` matches this API; `exp` and `nbf` are checked with at most 60 s clock skew; the token type is an access token.
 Access tokens live at most 60 minutes; refresh tokens have an absolute expiry of at most 24 hours.
 - Applies when: `AUTHN`, `AUTHZ`
 - Refs: ASVS 9.1.1, 9.1.2, 9.1.3, 9.2.1, 9.2.2, 9.2.3, 10.4.8 · A07:2025
 - Evidence: tests for a wrong `aud`, an expired token, `alg: none`, and a token signed by another key
-- Lab exception rule: ASVS 5.0 Appendix C marks RSA PKCS#1 v1.5 signatures (`RS256`) as disallowed. If the chosen provider can only sign with `RS256`, record a lab exception in BASELINE before using it.
 
 ### SR-019 Browser token and cookie handling (MUST)
 - Tokens are never stored in `localStorage` or `sessionStorage`. They are kept in memory, or in a cookie that is `HttpOnly`, `Secure`, `SameSite=Lax` (`Strict` for administrative functions) and named with the `__Host-` prefix.
