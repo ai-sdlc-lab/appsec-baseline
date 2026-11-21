@@ -100,7 +100,7 @@ API responses with user-specific data carry `Cache-Control: no-store`. No CORS h
 - Evidence: botocore `Config` with timeouts and retries in code; test with a failing S3 stub asserting `503`
 
 ### SR-007 Resource and abuse limits (MUST)
-- Function timeout ≤ 10 s; memory fixed in IaC.
+- Function timeout ≤ 240 s (lab value; changed 2026-11-21 from 10 s by the owner); memory fixed in IaC. Every outbound call has its own shorter deadline.
 - Endpoints that write or do heavy work SHOULD enforce a per-identity rate limit (lab value: 10 writes per user per minute) where the platform allows it.
 - Concurrency MUST be capped per function once the account quota permits reserved concurrency.
 - Applies when: `WRITE`, `FILE`, `ENDPOINT`
